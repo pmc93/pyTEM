@@ -10,14 +10,10 @@ import socket
 
 import sys
 
-sys.path.append(r'C:\Users\pamcl\OneDrive - Danmarks Tekniske Universitet\Dokumenter\Projects\Python\Pytem/')
 import survey as S
 
 import inv_helper as ih
 
-sys.path.append(r'C:\Users\pamcl\OneDrive - Danmarks Tekniske Universitet\Dokumenter\Projects\Python\Pytem0')
-
-from import_colors import getAarhusCols, getParulaCols
 from plot_tem import *
 
 matplotlib.use('Agg')
@@ -434,17 +430,21 @@ class PyTEMApp:
         
     def inv_method(self, survey_list, single):
 
-        S.write_tem_files(survey_list)
-
         if self.model_type == 'Resistivity':
             messagebox.showwarning("Error", "Please select the MPA model type.")
             self.model_type = 'MPA'
             self.model_type_combo.set('MPA')
             self.create_start_model()
 
+
         if self.inv_dir is None:
             self.set_inv_dir()
 
+        os.chdir(self.inv_dir)
+
+        S.write_tem_files(survey_list)
+
+       
         self.get_model_values() 
       
         model = self.model_values
