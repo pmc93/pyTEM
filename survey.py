@@ -410,7 +410,13 @@ def plot_column_from_surveys(survey_list):
     plt.yscale('log')
     plt.grid(True)
     plt.show()
+    
 
+def smart_figsize_from_data(x, y, base_height=5):
+    """Adjust figsize based on the aspect ratio of the data range."""
+    aspect_ratio = (max(x) - min(x)) / (max(y) - min(y))
+    width = base_height * aspect_ratio
+    return (width, base_height)
 
 def plot_survey_locs(survey_list, ax=None, basemap=False, epsg=None, text_color='w'):
 
