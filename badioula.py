@@ -79,7 +79,7 @@ plt.savefig(f'{loc}_map.png')
 #%%
 k = 0
 
-inv_dir = r"C:\Users\pamcl\AarhusInv\inv_dir"
+inv_dir = #inversion directory
 os.chdir(inv_dir)
 
 S.clean_inv_dir(inv_dir, extension='.tem')
@@ -100,7 +100,7 @@ params_set = list(itertools.product(start_rhos, phi_maxs, tau_peaks, cs, thk1s))
 
 confile = "SarayaConfile.con"
 src_file = 'my_model.emo'
-dest_dir = r"c:\Users\pamcl\OneDrive - Danmarks Tekniske Universitet\Dokumenter\Projects\Saraya\inv_results/"+loc+"_T"+str(k+1)
+dest_dir = "..inv_results/"+loc+"_T"+str(k+1)
 
 #%%
 def delete_folders(directory_path, start_index=1):
@@ -140,7 +140,7 @@ def delete_folders(directory_path, start_index=1):
             print(f"Failed to delete folder '{folders[i]}': {e}")
 
 # Usage
-directory_path = r'C:\Users\pamcl\AarhusInv'
+directory_path = #inversion directory 
 delete_folders(directory_path)
 #%%
 import saraya_parallel as p
@@ -148,7 +148,7 @@ importlib.reload(p)
 
 p.run_threaded(S, params_set, inv_dir, survey_list_T[0], confile, src_file, dest_dir, num_threads=20)
 
-dest_dir = r"C:\Users\pamcl\OneDrive - Danmarks Tekniske Universitet\Dokumenter\Projects\Saraya\inv_results\Badioula_T1"
+dest_dir = # directory to copy files to
 
 emo_files = [file for file in os.listdir(dest_dir) if file.endswith('.emo')]
 n_soundings = len(S.read_emo_file(os.path.join(dest_dir, emo_files[0])))
@@ -156,7 +156,7 @@ n_soundings = len(S.read_emo_file(os.path.join(dest_dir, emo_files[0])))
 
 #%%
 
-api_key = "AIzaSyCsFOM4HgQKKOHjRAqxudktkKEi-9nbfzw"  # Replace with your Google Maps API key
+api_key =  # Replace with your Google Maps API key
 
 import utm
 
@@ -184,7 +184,7 @@ def get_elevation(latitude, longitude, api_key):
         print(f"HTTP Error: {response.status_code}")
     return None
 
-emo_dir = r"C:\Users\pamcl\OneDrive - Danmarks Tekniske Universitet\Dokumenter\Projects\Saraya\inv_results\Badioula_T1"
+emo_dir = 
 elev_new = []
 models = S.read_emo_file(os.path.join(emo_dir, emo_files[0]))
 
