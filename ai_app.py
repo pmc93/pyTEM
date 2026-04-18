@@ -1,4 +1,5 @@
 #%%
+
 import os
 import numpy as np
 import matplotlib.pyplot as plt
@@ -9,6 +10,7 @@ from tkinter import filedialog, messagebox
 import socket
 
 import sys
+sys.path.append(r'C:\Users\pamcl\OneDrive - Danmarks Tekniske Universitet\Dokumenter\Projects\Python\pyTEM')
 
 import survey as S
 
@@ -311,6 +313,7 @@ class PyTEMApp:
         self.layer_frame_buttons[1].configure(state=ct.NORMAL)
         self.layer_frame_buttons[2].configure(state=ct.NORMAL)
 
+        self.model_frame_buttons[0].configure(state=ct.NORMAL)
         self.model_frame_buttons[1].configure(state=ct.NORMAL)
         self.model_frame_buttons[2].configure(state=ct.NORMAL)
 
@@ -413,7 +416,7 @@ class PyTEMApp:
 
     def run_fwd(self):
 
-        print('Dummy function')
+        self.fwd_method(self.survey_list)
 
     def inversion_objective(self, params):
         
@@ -427,7 +430,109 @@ class PyTEMApp:
     def inv_all(self):
         
         self.inv_method(self.survey_list, single=False)
+
+    def fwd_method(self, survey_list):
+
+        if self.inv_dir is None:
+            self.set_inv_dir()
+
+        os.chdir(self.inv_dir)
+
+        S.write_tem_files(survey_list)
+       
+        self.get_model_values() 
+      
+        model = self.model_values
+
+        start_model = {'num_layers': model.shape[0]}
+        start_model['rho'] = model[:,1]
+        start_model['thk'] = model[:-1,0]
+        start_model['depth'] = np.cumsum(start_model['thk']).tolist()
+
+        rhos0  = start_model['rho'].copy()
+        depths0 = np.cumsum(model[:,0]).tolist().copy()
+
+        confile = "AarhusInv0.con"
+
+        ih.run_rho_fwd(S, inv_dir=self.inv_dir, confile=confile, mod_file=self.mo2,
+                       start_model=start_model, survey_list=survey_list)
         
+        out = S.read_fwr_file('my_model00001.fwr')
+
+        S.rename_fwr_to_tem('my_model00001.fwr')
+
+        survey = {}
+        survey['filename'] = "my_model00001.tem"
+        survey['header_info'] = {}
+        survey['header_info']['XUTM'] = 0
+        survey['header_info']['YUTM'] = 0
+        survey['header_info']['Elevation'] = 0
+
+        survey_list = [survey]
+
+        ih.run_rho_inv(S, inv_dir=self.inv_dir, confile=confile, mod_file=self.mo2,
+                       start_model=start_model, survey_list=survey_list)
+
+        models = S.read_emo_file(self.em2)
+        
+        model = models[0]
+
+        model_array = model['parameters'].values[-1, :]
+
+        print(model['parameters'].values[0, :])
+        print(model['parameters'].values[-1, :])
+
+        model_array = np.append(model_array, 10.0)
+
+        model_array = model_array.reshape(-1, 30).T
+    
+        # Move the last column to the front
+        data = np.hstack((model_array[:, -1:], model_array[:, :-1]))
+
+        # Compute cumulative depth
+        thicknesses = data[:, 0]
+        resistivities = data[:, 1]
+        depths = np.cumsum(thicknesses)  # Cumulative sum of thicknesses
+
+        # Add a starting point at depth = 0
+        depths = np.insert(depths, 0, 0)
+        resistivities = np.insert(resistivities, 0, resistivities[0])  # Extend resistivities
+
+        # Create the step plot
+
+        fig, ax = plt.subplots(figsize=(4, 4))
+
+        depths0 = np.insert(depths0, 0, 0)
+        rhos0 = np.insert(rhos0, 0, rhos0[0])
+
+        ax.step(rhos0, depths0, where='post', 
+                linewidth=2, c='k', label='Target')
+        ax.step(resistivities, depths, where='post', 
+                linewidth=2, c='r', label='Inversion')
+        ax.invert_yaxis()
+
+        # Labels and title
+        ax.set_xlabel("Resistivity (Ohm-m)")
+        ax.set_ylabel("Depth (m)")
+
+        # Show the plot
+        ax.grid()
+
+        ax.legend()
+
+        fig.tight_layout()
+
+        ax.set_xscale('log')
+        ax.set_xlim(1, 500)
+       
+        for widget in self.plot_frame.winfo_children():
+            widget.destroy()
+
+        # Set up canvas for plotting
+        self.canvas = FigureCanvasTkAgg(fig, master=self.plot_frame)
+        self.canvas.get_tk_widget().grid(row=0, column=0)
+        self.canvas.draw()  
+     
     def inv_method(self, survey_list, single):
 
         if self.model_type == 'Resistivity':
@@ -436,14 +541,12 @@ class PyTEMApp:
             self.model_type_combo.set('MPA')
             self.create_start_model()
 
-
         if self.inv_dir is None:
             self.set_inv_dir()
 
         os.chdir(self.inv_dir)
 
         S.write_tem_files(survey_list)
-
        
         self.get_model_values() 
       
@@ -472,6 +575,7 @@ class PyTEMApp:
                        start_model=start_model, survey_list=survey_list)
         
         models = S.read_emo_file(self.em2)
+
 
         self.profiler_list = []
 

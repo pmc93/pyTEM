@@ -21,11 +21,13 @@ def read_data_block(lines):
     header_info_parts = header_info_line.split(';')
     for part in header_info_parts:
         if '=' in part:
-            key, value = part.split('=')
+            key, value = part.split('=', 1)
             try:
                 header_info[key] = float(value) if '.' in value else int(value)
             except ValueError:
                 header_info[key] = value
+        else:
+            print(f"Skipping malformed entry: {part}")  # Debugging step
     data['header_info'] = header_info
 
     # Read waveform data (assuming this is consistent across all blocks)
@@ -254,8 +256,6 @@ def write_tem_file(data):
             for index, row in data['tem_data'].iterrows():
                 f.write("".join(f"{row['GateCenter']:.6e} {row['Signal']:.6e} {row['Error']:.6e} {int(row['GateOpen']):d} {int(row['GateClose']):d}\n"))
 
-
-
 def write_model_block(f, start_model, parameter, default_value, alpha=9e9, last_model=False):
     param1 = 1
     param2 = 1
@@ -307,6 +307,52 @@ def write_model_block(f, start_model, parameter, default_value, alpha=9e9, last_
             for i, value in enumerate(start_model[parameter]):
                 f.write(f"{value: .4e} {param3: .4e} {'' :>11} {param1:11d}\n")
 
+def write_model_block0(f, start_model, parameter):
+
+    param3 = -1
+
+    if parameter != 'thk' and parameter != 'depth':
+        for i, value in enumerate(start_model[parameter]):
+            if i == start_model['num_layers']-1:
+                f.write(f"{value: .4e} {param3: .4e}\n")
+            else:
+                f.write(f"{value: .4e} {param3: .4e}\n")
+
+    elif parameter == 'thk':
+        for i, value in enumerate(start_model[parameter]):
+            if i == start_model['num_layers']-2:
+                f.write(f"{value: .4e} {param3: .4e}\n")
+            else:
+                f.write(f"{value: .4e} {param3: .4e}\n")
+
+    else:
+        for i, value in enumerate(start_model[parameter]):
+            f.write(f"{value: .4e} {param3: .4e}\n")
+
+def write_model_block1(f, start_model, parameter, last_model=False):
+
+    param1 = 4e-1
+    param3 = -1
+    param4 = 1e-3
+    param5 = 9e9
+
+    if parameter != 'thk' and parameter != 'depth':
+        for i, value in enumerate(start_model[parameter]):
+            if i == start_model['num_layers']-1:
+                f.write(f"{value: .4e} {param3: .4e}\n")
+            else:
+                f.write(f"{value: .4e} {param3: .4e} {param1: .4e}\n")
+
+    elif parameter == 'thk':
+        for i, value in enumerate(start_model[parameter]):
+            if i == start_model['num_layers']-2:
+                f.write(f"{value: .4e} {param4: .4e} {param5: .4e}\n")
+            else:
+                f.write(f"{value: .4e} {param4: .4e} {param5: .4e}\n")
+
+    else:
+        for i, value in enumerate(start_model[parameter]):
+            f.write(f"{value: .4e} {param3: .4e}\n")
 
 def write_mo2_file(filename, survey_list, inv_settings, start_model, default_value):
     with open(filename, 'w') as f:
@@ -343,13 +389,28 @@ def write_mo2_file(filename, survey_list, inv_settings, start_model, default_val
             if i == len(survey_list)-1:
                 last_model = True
 
-            write_model_block(f, start_model, parameter='rho', default_value=start_model['rho_v'], alpha=alpha, last_model=last_model)
-            write_model_block(f, start_model, parameter='phi_max', default_value=start_model['phi_max_v'], alpha=alpha, last_model=last_model)
-            write_model_block(f, start_model, parameter='tau_peak', default_value=start_model['tau_peak_v'], alpha=alpha, last_model=last_model)
-            write_model_block(f, start_model, parameter='c', default_value=start_model['c_v'], alpha=alpha, last_model=last_model)
-            write_model_block(f, start_model, parameter='thk', default_value=-1, alpha=alpha, last_model=last_model)
-            write_model_block(f, start_model, parameter='depth', default_value=default_value, alpha='depth_c', last_model=last_model)
-        
+            if inv_settings['constraints'] == 2:
+
+                write_model_block(f, start_model, parameter='rho', default_value=start_model['rho_v'], alpha=alpha, last_model=last_model)
+                
+                if inv_settings['param_layout'] == 114:
+                    write_model_block(f, start_model, parameter='phi_max', default_value=start_model['phi_max_v'], alpha=alpha, last_model=last_model)
+                    write_model_block(f, start_model, parameter='tau_peak', default_value=start_model['tau_peak_v'], alpha=alpha, last_model=last_model)
+                    write_model_block(f, start_model, parameter='c', default_value=start_model['c_v'], alpha=alpha, last_model=last_model)
+                
+                write_model_block(f, start_model, parameter='thk', default_value=-1, alpha=alpha, last_model=last_model)
+                write_model_block(f, start_model, parameter='depth', default_value=default_value, alpha='depth_c', last_model=last_model)
+
+            if inv_settings['constraints'] == 0:
+                write_model_block0(f, start_model, parameter='rho')
+                write_model_block0(f, start_model, parameter='thk')
+                write_model_block0(f, start_model, parameter='depth')
+            
+            if inv_settings['constraints'] == 1:
+                write_model_block1(f, start_model, parameter='rho')
+                write_model_block1(f, start_model, parameter='thk')
+                write_model_block1(f, start_model, parameter='depth')
+
 def rename_surveys(survey_list, site_name):
 
     num_digits = len(str(len(survey_list)))
@@ -357,8 +418,6 @@ def rename_surveys(survey_list, site_name):
     for i, survey in enumerate(survey_list):
         
         survey['filename'] = f"{site_name}_{str(i+1).zfill(num_digits)}.{'tem'}"
-
-
 
 def plot_column_from_surveys(survey_list):
     # Initialize a list to store the column data from all surveys
@@ -410,6 +469,87 @@ def plot_column_from_surveys(survey_list):
     plt.yscale('log')
     plt.grid(True)
     plt.show()
+
+def rename_fwr_to_tem(file_path):
+    """
+    Renames a single .fwr file to a .tem file.
+
+    Parameters:
+        file_path (str): Full path to the .fwr file.
+    """
+    if not os.path.isfile(file_path):
+        print(f"Error: The file '{file_path}' does not exist.")
+        return
+
+    if not file_path.lower().endswith('.fwr'):
+        print(f"Error: The file '{file_path}' is not a .fwr file.")
+        return
+
+    new_file_path = file_path.rsplit('.', 1)[0] + '.tem'
+
+    try:
+        if os.path.exists(new_file_path):
+            os.remove(new_file_path)
+            print(f"Deleted existing file: {new_file_path}")
+        os.rename(file_path, new_file_path)
+        print(f"Renamed: {file_path} → {new_file_path}")
+    except Exception as e:
+        print(f"Error renaming file {file_path}: {e}")
+
+def read_fwr_file(file_path):
+    """
+    Reads a TEM (.tem) file, extracts metadata and numerical data blocks.
+
+    Parameters:
+        file_path (str): Path to the TEM data file.
+    """
+    if not os.path.isfile(file_path):
+        print(f"Error: The provided path '{file_path}' is not a valid file.")
+        return
+
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            data = f.readlines()
+            
+            metadata = []
+            numerical_data = []
+            data_section = False
+
+            for line in data:
+                line = line.strip()
+
+                # Identify where the numerical data begins (first line with columns of numbers)
+                if not data_section:
+                    if line and all(c.isdigit() or c.isspace() or c in '.-+eE' for c in line):
+                        data_section = True
+                        numerical_data.append(line)
+                    else:
+                        metadata.append(line)
+                else:
+                    numerical_data.append(line)
+
+    except Exception as e:
+        print(f"Error reading file {file_path}: {e}")
+
+    return parse_numerical_data(numerical_data)
+
+def parse_numerical_data(numerical_data):
+    """
+    Parses numerical data from a list of strings into a structured format (list of lists).
+
+    Parameters:
+        numerical_data (list of str): List of numerical data strings.
+
+    Returns:
+        list of lists: Parsed numerical data as floats and integers.
+    """
+    parsed_data = []
+    
+    for line in numerical_data:
+        parsed_line = [float(x) if '.' in x or 'E' in x or 'e' in x else int(x) for x in line.split()]
+        parsed_data.append(parsed_line)
+
+    return pd.DataFrame(parsed_data)
     
 
 def smart_figsize_from_data(x, y, base_height=5):

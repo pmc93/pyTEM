@@ -259,6 +259,11 @@ def interp_idw(x, y, z, xi, yi, power=2, interp_radius=10):
     None.
 
     """
+
+    x=x[~np.isnan(z)]
+    y=y[~np.isnan(z)]
+    z=z[~np.isnan(z)]
+    
     # Calculate distances between grid points and input points
     dists = np.sqrt((x[:, np.newaxis] - xi[np.newaxis, :])**2 +
                     (y[:, np.newaxis] - yi[np.newaxis, :])**2)
@@ -276,29 +281,31 @@ def interp_idw(x, y, z, xi, yi, power=2, interp_radius=10):
     zi = np.sum(z[:, np.newaxis] * weights, axis=0)
     return zi
 
-def plot_sounding(walkTEM_dict, log=True, param='rhos', vmin=0, vmax=1000, title=None, label=None, ax=None, doi=True, col='k', ymin=None, ymax=None, extend_last_layer=True):
+def plot_sounding(walkTEM_dict, log=True, param='rhos', use_elev=False, vmin=0, vmax=1000, title=None, label=None, ax=None, doi=True, col='k', ymin=None, ymax=None, extend_last_layer=True):
     
     params = walkTEM_dict[param]
     depths = walkTEM_dict['bot_depths']
 
+    if use_elev:
+        a = -1
+    else:
+        a = 1
+
     if extend_last_layer:
         params = np.append(params, params[-1])
         depths = np.append(depths, depths[-1]*2.5)
-    
-    if doi:
-        doi = walkTEM_dict['doi']
-    
+          
     if ax is None:
         fig, ax = plt.subplots(figsize=(5,10))
     else:
         fig = ax.figure
 
     if doi:
-        idx = np.where(depths > doi)[0][0]
-        ax.step(params[:idx], -np.insert(depths, 0, 0)[:idx], where='pre', c=col, label=label)
+        idx = np.where(depths > walkTEM_dict['doi'])[0][0]
+        ax.step(params[:idx], np.insert(depths, 0, 0)[:idx], where='pre', c=col, label=label)
         
-        ax.step(params[idx-1:], -np.insert(depths, 0, 0)[idx-1:],
-                where='pre', c='grey', ls='-',  alpha=0.8)
+        ax.step(params[idx-1:], np.insert(depths, 0, 0)[idx-1:],
+                where='pre', c='k', ls='--',  alpha=0.8)
     else:
         ax.step(params, -np.insert(depths, 0, 0), where='pre', c=col, label=label)
     
@@ -332,10 +339,10 @@ def plot_sounding(walkTEM_dict, log=True, param='rhos', vmin=0, vmax=1000, title
 
 
 def plot_model2D(rhos, depths, elev=None, dists=None, doi=None, 
-                 ax=None, vmin=1, vmax=1000, scale=10, contour=False,
+                 ax=None, vmin=1, vmax=1000, scale=10,
                  cmap=plt.cm.viridis, n_bins=16, discrete_colors=False,
                  log=True, flip=False, cbar=True, cbar_orientation='vertical',
-                 zmin=None, zmax=None, xmin=None, xmax=None, plot_title='',
+                 zmin=None, zmax=None, xmin=None, xmax=None, fill=True, plot_title='',
                  cbar_label='Resistivity [Ohm.m]'):
     """
 
@@ -450,8 +457,12 @@ def plot_model2D(rhos, depths, elev=None, dists=None, doi=None,
         norm = BoundaryNorm(bounds, 256)
 
     # Create polygon collection
-    coll = PolyCollection(coordinates, array=rhos.flatten('F'),
-                          cmap=cmap, norm=norm, edgecolors=None)
+    if fill:
+        coll = PolyCollection(coordinates, array=rhos.flatten('F'),
+                              cmap=cmap, norm=norm, edgecolors=None)
+    else:
+        coll = PolyCollection(coordinates, array=rhos.flatten('F'),
+                              cmap=cmap, norm=norm, facecolors='none')
     
     coll.set_clim(vmin=vmin, vmax=vmax)
 
@@ -463,22 +474,7 @@ def plot_model2D(rhos, depths, elev=None, dists=None, doi=None,
     else:
         fig = ax.figure
 
-    if contour:
-        max_depth = 100
-        centroid = np.mean(coordinates, axis=1)
-        centroidx = centroid[:, 0].reshape((-1, n_models))
-        centroidz = centroid[:, 1].reshape((-1, n_models))
-        xc = np.vstack([centroidx[0, :], centroidx, centroidx[-1, :]])
-        zc = np.vstack([np.zeros(n_models), centroidz, -
-                       np.ones(n_models)*max_depth])
-        val = np.c_[rhos[:, 0], rhos, rhos[:, -1]].T
-
-        levels = np.linspace(vmin, vmax, 15)
-
-        ax.contourf(xc, zc, val, cmap=cmap, levels=levels, extend='both')
-
-    else:
-        ax.add_collection(coll)
+    ax.add_collection(coll)
 
     # Blank out models below doi
     if doi is not None:
@@ -495,7 +491,7 @@ def plot_model2D(rhos, depths, elev=None, dists=None, doi=None,
         x_doi.append(x_doi[0])
 
         ax.fill(np.array(x_doi),  np.array(doi), edgecolor="none",
-                facecolor='w', alpha=0.9)
+                facecolor='w', alpha=0.75)
 
     if dists is not None:
         ax.set_aspect(scale)
@@ -529,14 +525,13 @@ def plot_model2D(rhos, depths, elev=None, dists=None, doi=None,
             cbar.ax.minorticks_off()
 
         else:
-            tick_locs = np.arange(vmin, vmax+0.00001, int(vmax-vmin)/4)
+            tick_locs = np.arange(vmin, vmax+1e-5, int(vmax-vmin)/4)
             cbar.set_ticks(tick_locs)
             cbar.set_ticklabels(np.round(tick_locs))
             cbar.ax.minorticks_off()
-            #cbar.ax.tick_params(size=0)
 
     if zmin is None:
-        zmin = np.nanmin(elev)+np.min(depths)
+        zmin = np.nanmin(elev) + np.min(depths)
 
     if zmax is None:
         zmax = np.nanmax(elev)
@@ -558,6 +553,7 @@ def plot_model2D(rhos, depths, elev=None, dists=None, doi=None,
 
     ax.grid(which='both')
     fig.tight_layout()
+
 
 
 def interp_lin(x, z):
@@ -637,7 +633,7 @@ def find_nearest(dict_data, x, y, dists=None, elev=None):
 
     return dist_loc, elev_loc, min_dist, idx
 
-def add_borehole(bh_dict, ax, bh_width=0.2, text_size=12, x_start=None, x_end=None, bounds=False):
+def add_borehole(bh_dict, ax, bh_width=0.2, use_elev=False, text_size=12, x_start=None, x_end=None, bounds=False):
     """
     
 
@@ -662,34 +658,64 @@ def add_borehole(bh_dict, ax, bh_width=0.2, text_size=12, x_start=None, x_end=No
 
     elev = bh_dict['elevation']
 
-    print(elev)
+    if use_elev:
             
-    for i in range(bh_dict['n_layers']):
+        for i in range(bh_dict['n_layers']):
+                    
+                coordinates = np.array(([x_start, elev-bh_dict['top_depths'][i]],
+                                        [x_end, elev-bh_dict['top_depths'][i]],
+                                        [x_end, elev-bh_dict['bot_depths'][i]],
+                                        [x_start, elev-bh_dict['bot_depths'][i]],
+                                        [x_start, elev-bh_dict['top_depths'][i]]))
                 
-            coordinates = np.array(([x_start, elev-bh_dict['top_depths'][i]],
-                                    [x_end, elev-bh_dict['top_depths'][i]],
-                                    [x_end, elev-bh_dict['bot_depths'][i]],
-                                    [x_start, elev-bh_dict['bot_depths'][i]],
-                                    [x_start, elev-bh_dict['top_depths'][i]]))
-            
-            if bounds:
+                if bounds:
 
-                p = Polygon(coordinates, facecolor=bh_dict['colors'][i], edgecolor = 'k', lw=0.5)
+                    p = Polygon(coordinates, facecolor=bh_dict['colors'][i], edgecolor = 'k', lw=0.5)
 
-            else:
-                p = Polygon(coordinates, facecolor=bh_dict['colors'][i], edgecolor = 'k', lw=0)
-        
-            ax.add_patch(p)
+                else:
+                    p = Polygon(coordinates, facecolor=bh_dict['colors'][i], edgecolor = 'k', lw=0)
             
-    coordinates = np.array(([x_start, elev-bh_dict['top_depths'][0]],
-                            [x_end, elev-bh_dict['top_depths'][0]],
-                            [x_end, elev-bh_dict['bot_depths'][-1]],
-                            [x_start, elev-bh_dict['bot_depths'][-1]],
-                            [x_start, elev-bh_dict['top_depths'][-1]]))
-            
-    p = Polygon(coordinates, facecolor='none', edgecolor = 'k', lw=1)
+                ax.add_patch(p)
+                
+        coordinates = np.array(([x_start, elev-bh_dict['top_depths'][0]],
+                                [x_end, elev-bh_dict['top_depths'][0]],
+                                [x_end, elev-bh_dict['bot_depths'][-1]],
+                                [x_start, elev-bh_dict['bot_depths'][-1]],
+                                [x_start, elev-bh_dict['top_depths'][-1]]))
+                
+        p = Polygon(coordinates, facecolor='none', edgecolor = 'k', lw=1)
     
-    ax.add_patch(p)
+        ax.add_patch(p)
+
+    else:
+            
+        for i in range(bh_dict['n_layers']):
+                    
+                coordinates = np.array(([x_start, bh_dict['top_depths'][i]],
+                                        [x_end, bh_dict['top_depths'][i]],
+                                        [x_end, bh_dict['bot_depths'][i]],
+                                        [x_start, bh_dict['bot_depths'][i]],
+                                        [x_start, bh_dict['top_depths'][i]]))
+                
+                if bounds:
+
+                    p = Polygon(coordinates, facecolor=bh_dict['colors'][i], edgecolor = 'k', lw=0.5)
+
+                else:
+                    p = Polygon(coordinates, facecolor=bh_dict['colors'][i], edgecolor = 'k', lw=0)
+            
+                ax.add_patch(p)
+                
+        coordinates = np.array(([x_start, bh_dict['top_depths'][0]],
+                                [x_end, bh_dict['top_depths'][0]],
+                                [x_end, bh_dict['bot_depths'][-1]],
+                                [x_start, bh_dict['bot_depths'][-1]],
+                                [x_start, bh_dict['top_depths'][-1]]))
+                
+        p = Polygon(coordinates, facecolor='none', edgecolor = 'k', lw=1)
+    
+        ax.add_patch(p)
+    
     
     
 def write_boreholes(bh_list):
@@ -771,7 +797,7 @@ def add_boreholes(bh_list, x, y, dists, ax,  elev=None, search_radius=150,
 
             ax.add_patch(p)
             if add_label:
-                ax.text(dist_loc, elev_loc+shift,  bh['id'][4:],
+                ax.text(dist_loc, elev_loc+shift, bh['id'],
                         horizontalalignment='center',
                         verticalalignment='top', fontsize=text_size)
 
