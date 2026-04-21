@@ -1,0 +1,315 @@
+[AarhusInvSettings]
+ 
+ %General
+Version                       =           26  %Con file version, setting ID:  183
+ 
+ %IO
+OutputGen                     =            0  %0 -> general information to screen, 1 -> to file, setting ID:   10
+OutputLog                     =            0  %0 -> overwrite log file, 1 -> append, setting ID:   11
+OutputCov                     =            0  %1 -> write Jacobian, roughness, covariance and resolution matrices in .emm file; 0 -> don't; 2 -> same as 1, but no computation of the resolution matrix; 3 -> same as 2, but no analysis computation and no writing of the roughness matrix, setting ID:   43
+EmoWriteIte                   =            0  %1 -> write output file after each iteration (.ems); 0 -> don't; 2 -> write output files at the beginnig of each inversion cycle (for voxel-type inversion); 3 -> write the em2 file iteration by iteration with iteration-dependent name (for mo2/em2 inversions), setting ID:   44
+RejectNegativeData            =            0  %1 -> reject negative input data, 0 -> don't, setting ID:  223
+ 
+ %Inversion
+NCPUs                         =            1  %Number of CPUs used, setting ID:    1
+MinApriori                    =   1.0000E+60  %Minimum apriori STD on any parameter, setting ID:   12
+MaxStep                       =   3.0000E+00  %Maximum allowed parameter change factor at 1st iteration, setting ID:   13
+MinStep                       =   1.1000E+00  %Minimum allowed parameter change factor, setting ID:   14
+StepUp                        =   1.5000E+00  %Factor to increase MaxStep, setting ID:   15
+StepDown                      =   2.0000E+00  %Factor to decrease MaxStep, setting ID:   16
+NStepUp                       =            2  %Number of iterations before increase MaxStep, setting ID:   17
+HighMaxStepFactor             =   5.0000E+00  %High value for the factor multiplying MaxStep for the parameters with MaxStepFactor=HighMaxStepFactor, setting ID:  216
+LowMaxStepFactor              =   5.0000E-01  %Low value for the factor multiplying MaxStep for the parameters with MaxStepFactor=LowMaxStepFactor, setting ID:  217
+ReUseG                        =            1  %1 -> ReUseG from last iteration for analysis, 0 -> recalculate G from final result, setting ID:   18
+CalcAnalysis                  =            1  %0 -> Do not Calculate; 1 -> Calculate coupled analysis only; 2 -> Calculate coupled and uncoupled analysis, setting ID:   19
+CoupledAnalysisType           =           -1  %0 -> parallel sparse analysis for the full problem; 1 -> coupled to nearest neighbors; 2 -> further coupled to two nearest neighbors; -1-> parallel sparse analysis for the full problem (NPar<1000) or coupled to nearest neighbors (NPar>1000), setting ID:   20
+AnalysisPrior                 =   0.0000E+00  %0 -> no prior; any number bigger than zero -> prior value to be added to any parameter before analysis (relative number, e.g. 100 means STD=100 times the parameter value), setting ID:  260
+SubsetNormChangeSize          =   2.0000E-01  %Relative size of model space where the stop criterion must obey RelSubsetNormChange regardless of RelNormChangeD or RelNormChange, setting ID:   21
+RelSubsetNormChange           =   2.0000E-01  %Relative change in norm to stop iterations on any subset of size SubsetNormChangeSize, setting ID:   22
+RelNormChange                 =   7.0000E-03  %Relative change in norm to stop iterations for single-side derivatives, setting ID:   29
+RelNormChangeD                =   7.0000E-03  %Relative change in norm to stop iterations for double-side derivatives, setting ID:   30
+DataMisfitThreshold           =   2.0000E+00  %Data misfit threshold for stopping criterion, setting ID:  173
+SolverType                    =           -1  %Solver type in SMatsolveAxB. -1 -> auto-selected sparse solver or dense solver for 2D DCIP and MRS; 1 -> Dense solver and Dense algebra; 11 -> SSOR; 12 -> LU0; 14 -> BLUT, setting ID:   31
+NMaxElementsDenseAlgebra      =    536870912  %Maximum numner of elements in the Jacobian for dense algebra computations (NRows*NColumns), setting ID:  204
+NIteAlt                       =            5  %Number of iterations before inverting for Tx-altitude (model type specific), setting ID:   76
+NIteAng                       =            7  %Number of iterations before inverting for Tx-Rx-geometry (model type specific), setting ID:   77
+NIteTau                       =            0  %Number of iterations before inverting for Tau/T2* (model type specific), setting ID:  108
+NIteC                         =            0  %Number of iterations before inverting for C (model type specific), setting ID:  109
+NIteCharg                     =            0  %Number of iterations before inverting for chargeability (model type specific), setting ID:  220
+NApproxDeriv                  =            0  %Number iterations with approximate Jacobian computation (model type specific), setting ID:  111
+NApproxFor                    =            0  %Number of iterations with approximate forward computation (model type specific), setting ID:  112
+EndFull                       =            0  %1 -> Always end with full iterations (switch back if approx), 0 -> don't, setting ID:  113
+EndMinStep                    =            1  %1 -> Always end with Minimum step size when no approximation in forward/derivative are used; 2 -> Always end with Minimum step size; 0 -> don't, setting ID:  114
+Broyden                       =            0  %1 -> Use Broyden, 0 -> Don't, setting ID:  184
+NFullDeriv                    =            4  %Number of full iterations before switching to Broyden Derivatives (model type specific), setting ID:  185
+RelNormChangeB                =   5.0000E-02  %The relative change in norm to change from Broyden to full Jacobian, setting ID:  110
+IRLSType                      =            0  %Type of reweighting in the iterative reweighted least square inversion. 0 -> following Vignoli et al. (2015); 1 -> following Fiandaca et al. (2015), setting ID:  186
+GeneralizedMS1stExp           =   1.3500E+00  %First exponent in the generalized minimum support functional defined in Fiandaca et al. (2015), setting ID:  170
+GeneralizedMS2ndExp           =   2.0000E+00  %Second exponent in the generalized minimum support functional defined in Fiandaca et al. (2015), setting ID:  171
+ 
+ %ModelLinLog
+LogModel                      =            0  %0 -> Inversion in log model space, 1 -> lin, setting ID:   37
+LogData                       =            0  %0 -> Inversion in log data space, 1 -> lin, setting ID:   38
+LogNeg                        =            0  %0 -> Warn for negative forward data, but continue the inversion; 1 -> Stop when negative forward data; 2 -> Change to lin space when negative data (used only when working in log data space), setting ID:   39
+LogDepth                      =            0  %0 -> Relative depth constraints, inversion in log space, 1 -> Absolute depth constraints, setting ID:   40
+DepthRef                      =            1  %0 -> Depth-referenced lateral constraints, 1 -> Elevation-referenced lateral constraints, setting ID:   41
+AltRef                        =            0  %0 -> Height referenced Tx-altitudes, 1 -> Elevation referenced Tx-altitudes, setting ID:   42
+ 
+ %DOI
+DOI                           =            1  %1 -> Calculate Depth of Investigation (DOI), 0 -> Don't, setting ID:  115
+DOINLayers                    =           19  %Number of layers for the DOI calculations, setting ID:  116
+DOIDepth1                     =   2.5000E+00  %Thickness of first layer in the DOI calculations, setting ID:  117
+DOIDepthN                     =   2.2000E+02  %Depth to last layer boundary in the DOI calculations, setting ID:  118
+DOIAbsHigh                    =   1.5000E+00  %High absolute threshold for DOI calculations (Shallow), setting ID:  119
+DOIAbsLow                     =   7.5000E-01  %Low absolute threshold for DOI calculations (Deep), setting ID:  120
+DOIRelHigh                    =   5.0000E-02  %High relative threshold for DOI calculations (Shallow), setting ID:  121
+DOIRelLow                     =   2.0000E-02  %Low relative threshold for DOI calculations (Deep), setting ID:  122
+DOICAAHigh                    =   2.0000E+00  %High CAA (Cumulated Approximate Analysis) threshold for DOI calculations (Shallow), setting ID:  123
+DOICAALow                     =   5.0000E+00  %Low CAA (Cumulated Approximate Analysis) threshold for DOI calculations (Deep), setting ID:  124
+DOIParType                    =            0  %1 -> specific DOI threshold per par type (DOICAAHigh*par%factor or DOICAALow*par%factor, the factor being specified in the model type), 0 -> same DOI threshold for all paramater types, setting ID:  200
+HighDOIFactor                 =   5.0000E+00  %High value for the factor multiplying the DOI threshold the parameters with DOIFactor=HighDOIFactor, setting ID:  218
+LowDOIFactor                  =   5.0000E-01  %Low value for the factor multiplying the DOI threshold the parameters with DOIFactor=LowDOIFactor, setting ID:  219
+ 
+ %Voxel
+AutoVoxRunFile                =            1  %1 -> generate and run the automatic .vox file; 0 -> generate the automatic .vox file without running it, setting ID:  126
+AutoVoxSuffix                 =         none  %none -> no suffix in the output names; con -> confile name; auto -> model dimensionality MD and forward dimensionality FD (e.g. with MD=3and FD=1 3.1D); auto1 -> like auto, adding model type info; auto2 -> like auto, adding AutoProc keyword when used; auto3  -> like auto1, adding AutoProc keyword when used; Any other sufffix, added as written, setting ID:  259
+AutoVoxModelType              =            1  %Model type for the inversion. E.g. 1 -> resistivity; 5 -> resistivity + altitude (look at ListOfImplementedModelTypes.ini for a complete list), setting ID:  127
+AutoVoxDa2DataType            =            1  %Data type of the .da2 file. E.g. 1 -> .tem;  2 -> .fem; 3 -> .dcp; 4 -> .mtd; 7-> .hem (look at ListOfImplementedModelTypes.ini for a complete list), setting ID:  128
+AutoVoxModelDimensionality    =            3  %Dimensionality of the model space (allowed values: 1,2 & 3), setting ID:  253
+AutoVoxDimensionalityEM       =            1  %Dimensionality of the EM forward response, setting ID:  248
+AutoVoxSequentialSharp        =            0  %1 -> Run sharp inversion after previous cycle; 0 -> don't, setting ID:  249
+AutoVoxSequentialAutoStart    =            0  %1 -> run single-layer inversion in a preliminary cycle for setting up starting values; 0 -> don't, setting ID:  250
+AutoVoxSequential3DEM         =            0  %Number of iterations of 1D forward before switching to 2D/3D (only with AutoVoxDimensionalityEM= 2 or 3), setting ID:  251
+AutoVoxAutoProc               =            0  %1 -> Run automatic data processing: 0 -> don't, setting ID:  254
+AutoVoxBadFitThreshold        =   2.0000E+00  %Threshold for autoprocessing data rejection (chi value), setting ID:  255
+ConFileSettingsPerCycle       =            0  %Number of con file settings to be specified in the cycle of the vox file, such that they can be change among cycles, setting ID:  272
+MaxDistCoincSoundings         =   1.0000E+00  %Maximum distance of soundings with coincident position (in meters), for automatic mesh generation, setting ID:  257
+VirtualModelPosition          =            1  %For automatic mesh generation: 0 -> Virtual model in the sounding location; 1 -> Virtual model in the transmitter location; 2 -> Virtual model in the average Tx-Rx position; 3 -> Virtual model in the Rx position; 4 -> Virtual model in the transmitter location, rotated along the flight line, corrected considering UTMx/y in the center TX-RX position, setting ID:  258
+WriteProcessedData            =            1  %1 -> Write processed data file after data rejection, negative std for rejection;  0 -> Don't write processed data files, setting ID:  125
+WriteForwardData              =            0  %1 -> Write forward data at the end of each cycle; 0 -> don't, setting ID:  256
+WriteCompleteMeshes           =            0  %1 -> Write model/constraint meshes including nodes far from flight lines, 0 -> Don't include far nodes, 2 -> only for last iteration, setting ID:  129
+WriteCompleteForMeshes        =            0  %Write 3D forward meshes including the non-core cells, 0 -> Don't include non-core nodes, 2 -> only for last iteration, setting ID:  229
+WriteExportFiles              =            0  %1 -> Export model, forward model and data (WorkBench compatible format), 0 -> Don't, 2 -> only for last iteration, setting ID:  130
+WriteConstraintMesh           =            0  %1 -> Write constraint mesh, 0 -> Don't, 2 -> only for last iteration, setting ID:  131
+WriteForwardMesh              =            0  %1 -> Write forward mesh, 0 -> Don't, 2 -> only for last iteration, setting ID:  132
+WriteMisfitMesh               =            0  %1 -> Write misfit mesh, 0 -> Don't, 2 -> only for last iteration, setting ID:  237
+WriteIteNumber                =            1  %1 -> Write iteration number in the file names, 0 -> Don't, setting ID:  238
+VoxelDummyValue               =   9.9999E+03  %Dummy value for un-connected nodes in the workbench-style mesh export, setting ID:  133
+ 
+ %Damping
+DampInit                      =   5.0000E+03  %Initial damping, 1st iteration: Max(diagonal)/DampInit, setting ID:   23
+MaxDampInit                   =   1.0000E+06  %Maximum DampInit, every iteration, setting ID:   24
+DampInitUp                    =   3.0000E+00  %Factor to increase DampInit, setting ID:   25
+DampFactor                    =   3.0000E+00  %Factor to increase the damping between each try, setting ID:   26
+NMaxDamp                      =           20  %Max number of damping tries, setting ID:   27
+FirstTwoWayDamp               =            6  %First damping value, NDamp, setting ID:   28
+NoDampConstrOnly              =            0  %0 -> damping on all parameters; 1 -> no damping on the parameters driven only by constraints (with no Jacobian entries), setting ID:  178
+PartypeDamping                =            0  %0 -> same damping value for all partypes; 1 -> different damping for each par type, setting ID:  179
+MaxDiagElem                   =   1.0000E+05  %Maximum value for the diagonal elements in GTCd-1G for setting the damping up, setting ID:  261
+ 
+ %Parameter
+MinRes                        =   1.0000E-01  %Min resistivity (ohmm) allowed; its inverse used also for maximum total/bulk/water conductivity, setting ID:   45
+MaxRes                        =   2.0000E+04  %Max resistivity (ohmm) allowed; its inverse used also for minimum total/bulk/water conductivity, setting ID:   46
+MinThick                      =   1.0000E-01  %Min thickness (m) allowed, setting ID:   47
+MaxThick                      =   5.0000E+02  %Max thickness (m) allowed, setting ID:   48
+MaxM0                         =   8.0000E+02  %Max M0  (RCC/CCC IP models, mV/V) allowed, setting ID:   51
+MinM0                         =   1.0000E-01  %Min M0  (RCC/CCC IP models, mV/V) allowed, setting ID:   52
+MaxPhi                        =   2.0000E+02  %Max Phi (CPA/Drake/MPA IP models, mrad) allowed, setting ID:   57
+MinPhi                        =   1.0000E-02  %Min Phi (CPA/Drake/MPA IP models, mrad) allowed, setting ID:   58
+MinImagSigma                  =   1.0000E-04  %Min imaginary conductivity (MIC/BIC/TBIC,CAC/CABIC/CATBIC/BHYP/CABHYP IP models, mS/m) allowed, setting ID:   49
+MaxImagSigma                  =   1.0000E+02  %Max imaginary conductivity (MIC/BIC/TBIC,CAC/CABIC/CATBIC/BHYP/CABHYP IP models, mS/m) allowed, setting ID:   50
+MinImagRho                    =   1.0000E-04  %Min imaginary resistivity (MIR IP models, Ohmm) allowed, setting ID:  224
+MaxImagRho                    =   1.0000E+02  %Max imaginary resistivity (MIR IP models, Ohmm) allowed, setting ID:  225
+MinPermeability               =   1.0000E-15  %Min permeability (BHYP/CABHYP IP models, m^2) allowed, setting ID:  226
+MaxPermeability               =   1.0000E-05  %Max permeability (BHYP/CABHYP IP models, m^2) allowed, setting ID:  227
+MinHydrCond                   =   1.0000E-08  %Min hydraulic conductivity (THYCD/WHYCD/FHYCD/THYCT/WHYCT/FHYCT/WHYCDF, m/s) allowed, setting ID:  263
+MaxHydrCond                   =   1.0000E+02  %Max hydraulic conductivity (THYCD/WHYCD/FHYCD/THYCT/WHYCT/FHYCT/WHYCDF, m/s) allowed, setting ID:  264
+MaxTau                        =   1.0000E+02  %Max Tau (RCC/CCC/MPA/MIC/MIR/BIC/TBIC/CCeps/BHYP/THYCT/WHYCT/FHYCT IP models, s) allowed, setting ID:   53
+MinTau                        =   1.0000E-03  %Min Tau (RCC/CCC/MPA/MIC/MIR/BIC/TBIC/CCeps/BHYP/THYCT/WHYCT/FHYCT IP models, s) allowed, setting ID:   54
+MaxC                          =   6.0000E-01  %Max C   (RCC/CCC/MPA/MIC/MIR/BIC/TBIC/CCeps/BHYP/THYCD/WHYCD/FHYCD/THYCT/WHYCT/FHYCT/WHYCDF IP models, dimless) allowed, setting ID:   55
+MinC                          =   1.0000E-01  %Min C   (RCC/CCC/MPA/MIC/MIR/BIC/TBIC/CCeps/BHYP/THYCD/WHYCD/FHYCD/THYCT/WHYCT/FHYCT/WHYCDF IP models, dimless) allowed, setting ID:   56
+MaxfL                         =   1.0000E+00  %Max fL (Drake IP model, mHz) allowed, setting ID:   59
+MinfL                         =   1.0000E-03  %Min fL (Drake IP model, mHz) allowed, setting ID:   60
+MinW                          =   1.0000E-02  %Min W   (MRS, m3/m3) allowed, setting ID:   61
+MaxW                          =   1.0000E+00  %Max W   (MRS, m3/m3) allowed, setting ID:   62
+MinT2Star                     =   5.0000E-03  %Max Tau (MRS, s) allowed, setting ID:   63
+MaxT2Star                     =   1.5000E+00  %Min Tau (MRS, s) allowed, setting ID:   64
+MinCmrs                       =   3.0000E-01  %Max C   (MRS, dimless) allowed, setting ID:   65
+MaxCmrs                       =   1.0000E+00  %Min C   (MRS, dimless) allowed, setting ID:   66
+MinShift                      =   1.0000E-05  %Max Shift (MRS, rad) allowed, setting ID:   67
+MaxShift                      =   6.2800E+00  %Min Shift (MRS, rad) allowed, setting ID:   68
+MinT2f                        =   1.0000E+00  %Min value for T2f (MRS) allowed. T2=T2f*T2*, setting ID:  221
+MaxT2f                        =   1.0000E+04  %Max value for T2f (MRS) allowed. T2=T2f*T2*, setting ID:  222
+MinT1f                        =   1.0000E+00  %Min value for T1f (MRS) allowed. T1=T1f*T2, setting ID:  214
+MaxT1f                        =   5.0000E+00  %Max value for T1f (MRS) allowed. T1=T1f*T2, setting ID:  215
+MinVel                        =   1.0000E+01  %Max Velocity (SWD) allowed, setting ID:   69
+MaxVel                        =   7.5000E+03  %Min Velocity (SWD) allowed, setting ID:   70
+MinDens                       =   5.0000E+02  %Max Density  (SWD) allowed, setting ID:   71
+MaxDens                       =   4.0000E+03  %Min Density  (SWD) allowed, setting ID:   72
+MinPois                       =   1.0000E-03  %Max Poisson  (SWD) allowed, setting ID:   73
+MaxPois                       =   4.9000E-01  %Min Poisson  (SWD) allowed, setting ID:   74
+MaxEps                        =   1.0000E+04  %Max relative Permittivity (CCeps IP model, dimless) allowed, setting ID:  150
+MinEps                        =   1.0000E+00  %Min relative Permittivity (CCeps IP model, dimless) allowed, setting ID:  151
+MaxTemp                       =   3.5000E+01  %Max temperature (TRES/TBIC/CATBIC DC/IP models, Celsius) allowed, setting ID:  174
+MinTemp                       =   5.0000E+00  %Min temperature (TRES/TBIC/CATBIC DC/IP models model, Celsius) allowed, setting ID:  175
+MaxDist                       =   3.9990E-03  %Max inter-wire distance (MPAMk model, m) allowed, setting ID:  232
+MinDist                       =   1.0000E-06  %Min inter-wire distance (MPAMk model, m) allowed, setting ID:  233
+MaxD+                         =   1.0000E-06  %Max diffusion coefficient of the counterions in the Stern layer (MICD+/BICD+/MICEpsD+/BICEpsD+/THYCD/WHYCD/FHYCD/WHYCDF models, m^2/s) allowed, setting ID:  234
+MinD+                         =   1.0000E-14  %Min diffusion coefficient of the counterions in the Stern layer (MICD+/BICD+/MICEpsD+/BICEpsD+/THYCD/WHYCD/FHYCD/WHYCDF models, m^2/s) allowed, setting ID:  235
+MaxF                          =   1.0000E+02  %Max formation factor (FHYCD/FHYCT/WHYCDF models, dimless) allowed, setting ID:  265
+MinF                          =   1.0000E+00  %Min formation factor (FHYCD/FHYCT/WHYCDF models, dimless) allowed, setting ID:  266
+ 
+ %PetrophysicalCoefficientsVariablesSettings
+RefTemp                       =   2.5000E+01  %Reference temperature (TRES/TBIC/CATBIC DC/IP models, Celsius) for conductivity-temperature dependence, setting ID:  176
+dSigma/dTemp                  =   1.8300E-02  %Slope for DC conductivity-temperature (TRES/TBIC/CATBIC DC/IP models, S/m/Celsius) dependence, setting ID:  177
+dSigma2nd/dTemp               =   1.8300E-02  %Slope for imaginary conductivity-temperature (TBIC/CATBIC IP models, S/m/Celsius) dependence, setting ID:  180
+Sigma2ndSurf/Sigma1stSurf     =   4.2000E-02  %Proportionality between imaginary and real surface conductivity (BIC/TBIC/CABIC/CATBIC IP models, dimless), setting ID:  181
+alpha                         =   1.0800E-13  %coefficient for permeability estimation (dimless). k=alpha/(F**beta*sigma2nd_ref**gamma), sigmab=sigmaw/F and sigma2nd=sigma2nd_ref*(sigmaw/sigmaw_ref)**delta, from Fiandaca et al. 2018. BHYP/CABHYP models., setting ID:  201
+beta                          =   1.1200E+00  %coefficient for permeability estimation (dimless). k=alpha/(F**beta*sigma2nd_ref**gamma), sigmab=sigmaw/F and sigma2nd=sigma2nd_ref*(sigmaw/sigmaw_ref)**delta, from Fiandaca et al. 2018. BHYP/CABHYP models., setting ID:  202
+gamma                         =   2.2700E+00  %coefficient for permeability estimation (dimless). k=alpha/(F**beta*sigma2nd_ref**gamma), sigmab=sigmaw/F and sigma2nd=sigma2nd_ref*(sigmaw/sigmaw_ref)**delta, from Fiandaca et al. 2018. BHYP/CABHYP models., setting ID:  203
+PermeabilityToHydrCond        =   7.5000E+06  %Conversion factor from permeability to hydraulic conductivity., setting ID:  267
+delta                         =   3.7000E-01  %coefficient for permeability estimation (dimless). k=alpha/(F**beta*sigma2nd_ref**gamma), sigmab=sigmaw/F and sigma2nd=sigma2nd_ref*(sigmaw/sigmaw_ref)**delta, from Fiandaca et al. 2018. BHYP/CABHYP models., setting ID:  212
+sigmaw                        =   5.0000E+01  %reference water conductivity for permeability estimation (mS/m). k=alpha/(F**beta*sigma2nd_ref**gamma), sigmab=sigmaw/F and sigma2nd=sigma2nd_ref*(sigmaw/sigmaw_ref)**delta, from Fiandaca et al. 2018. BHYP/CABHYP/ThyCD/ThyCT/FhyCD/FhyCT models., setting ID:  213
+Cp                            =   1.0000E-09  %specific polarizability (mS), such that Sig2nd=Cp*Spor. MICD+/BICD+/MICEpsD+/BICEpsD+ models., setting ID:  236
+F                             =   5.0000E+00  %formation factor. WhyCD/WhyCT models., setting ID:  262
+ForceSigma0M0TauLimits        =            1  %1 -> force sigma0/m0/tau confile range limits after converting parameters of other parameterizations (for BIC/ThyCD/ThyCT/WhyCD/WhyCT/FhyCD/FhyCT/WhyCDF models); 0 -> apply only the range limits on the original model parameters, setting ID:  268
+ 
+ %Forward
+FDenseCSLow                   =           10  %Low filter density for the cos-sine filter, setting ID:   33
+FDenseCSHigh                  =           14  %High filter density for the cos-sine filter, setting ID:   34
+FDenseJLow                    =            6  %Low filter density for the J_1-J1 filter, setting ID:   35
+FDenseJHigh                   =           10  %High filter density for the J_1-J1 filter, setting ID:   36
+ST72ForType                   =            1  %Computation type for TEM source type ST=72 for forward computations: 1 -> Hankel transform; 2 -> Laplace transform; 3 -> time-domain filter/waveform convolution; 4 -> aritificial intelligence AI; 5 -> fast approximate FAI, setting ID:  269
+ST72DerivType                 =            1  %Computation type for TEM source type ST=72 for jacobian computations: 1 -> Hankel transform; 2 -> Laplace transform; 3 -> time-domain filter/waveform convolution; 4 -> aritificial intelligence AI; 5 -> fast approximate FAI, setting ID:  270
+ST72ApproxType                =            5  %Computation type for TEM source type ST=72 for approximate computations: 4 -> aritificial intelligence AI; 5 -> fast approximate FAI, setting ID:  271
+AddNoise2Scr                  =            0  %0 -> add noise to forward (.fwr) files, 1 -> no noise, setting ID:   75
+SRConvCoarsestSampling        =            6  %The coarsest temporal sampling used for the system response convolution, setting ID:  163
+SRConvNSamplingSteps          =            4  %Refinement samplings steps used for the system response convolution. Finest sampling is 2^SRConvNSamplingSteps*SRConvCoarsestSampling, setting ID:  164
+SRConvRefinementLimit         =   1.0000E-01  %Refinelimit which determines when to calculate more points. If a straight line approx. is more than SRConvRefinementLimit off, refinement is performed, setting ID:  165
+TDFiltConvCoarsestSamp        =           12  %The coarsest temporal sampling used for the time domain filter convolution, setting ID:  166
+TDFiltConvNSamplingSteps      =            2  %Refinement samplings steps used for the time domain filter convolution. Finest sampling is 2^TDFiltConvNSamplingSteps*TDFiltConvCoarsestSamp, setting ID:  167
+TDFiltConvRefineLimit         =   1.0000E-02  %Refinement limit for time domain filter convolution, setting ID:  168
+ 
+ %FAI
+cFAI                          =   7.5000E-01  %, setting ID:  103
+alphaFAI                      =   4.5000E-01  %, setting ID:  104
+nbTxZFAIcon                   =          100  %Number of different transmitter altitudes, setting ID:  105
+nbSigRefFAI                   =            8  %Number of reference conductivities, setting ID:  106
+SigRefFAI                     =   1.0000E-01  1.0000E+00  1.0000E+01  1.0000E+02  1.0000E+03  2.0000E+03  5.0000E+03  1.0000E+04  %Reference resistivities, setting ID:  107
+ 
+ %2DDCIP
+EmoWriteFilterWaveInfo        =            0  %0 -> Do not write filter and waveform info in the .emo file (Workbench standard); 1 -> Write info, setting ID:   32
+LowerDecade                   =           -8  %Lower decade for the allocation of the Frequency Domain 2D DCIP Kernels, setting ID:   78
+UpperDecade                   =            4  %Upper decade for the allocation of the Frequency Domain 2D DCIP Kernels, setting ID:   79
+AutoExtend                    =            1  %0 -> Stop the inversion when the frequency range is exceeded; 1 -> Warn and extend range at next iteration; 2 -> Warn but keep the range, setting ID:   80
+LowResPPD                     =            1  %Number of points per decade for kernel splining in low resolution mode (NIte <= NApproxFor), setting ID:   81
+HighResPPD                    =            5  %Number of points per decade for kernel splining in high resolution mode (NIte > NApproxDeriv), setting ID:   82
+LowResNCM                     =           15  %Number of models close to the data one for the computation of the 2D Jacobian in low resolution mode, setting ID:   83
+HighResNCM                    =           15  %Number of models close to the data one for the computation of the 2D Jacobian in high resolution mode, setting ID:   84
+DOINCM                        =          100  %Number of models close to the data one for the computation of the 2D Jacobian for DOI, setting ID:   85
+LowResMinRelChange            =            1  %1 -> the minimum between DC total misfit and IP total misfit is considered as stopping criterion (in low resolution mode); 0 -> the global total mifit is used instead, setting ID:   86
+HighResMinRelChange           =            1  %1 -> the minimum between DC total misfit and IP total misfit is considered as stopping criterion (in high resolution mode); 0 -> the global total mifit is used instead, setting ID:   87
+LowResIPFactor                =   1.0100E+02  %Multiplying scaling factor for IP data/model STDs, in low resolution mode (it weights the DC versus IP Jacobian/Constraints). When IPFactor>100, the IP Jacobian computation is turned off, setting ID:   88
+HighResIPFactor               =   1.0000E+00  %Multiplying scaling factor for IP data/model STDs, in high resolution mode (it weights the DC versus IP Jacobian/Constraints). When IPFactor>100, the IP Jacobian computation is turned off, setting ID:  182
+ApproxCPAtrans                =            1  %0 -> Full time transform of CPA-type forward/derivative; 1 -> Approximate (faster) time transform of CPA-type forward/derivative, setting ID:  187
+ 
+ %SWD
+SWDMethod                     =            0  %0 -> All layers solid, 0 -> with liquid top layer, setting ID:   89
+SWDSearchStep                 =   2.0000E-05  %Max step in wavenumber search for SWD forward calculations, setting ID:   90
+ 
+ %MRS
+MinDepth                      =   1.0000E-02  %Min Z discretization limit, expressed as depth value (m), setting ID:   91
+MaxRelDepth                   =   5.0000E+00  %Max Z discretization limit, expressed as # of loop side length, setting ID:   92
+MinXDisc                      =   2.5000E-02  %Min horiz discretization limit, expressed as fraction of loop side length, setting ID:   93
+MaxXDisc                      =   1.0000E+02  %Max horiz discretization limit, expressed as fraction of loop side length, setting ID:   94
+ZDiscSwitch                   =   2.0000E-01  %Depth (m) at which z discretization (number of samples) is changed. Expressed as fraction of loop side length, setting ID:   95
+NDecShallow                   =            5  %Number of points per decade for the Z discretization (Shallow setting), setting ID:   96
+NDecDeep                      =           20  %Number of points per decade for the Z discretization (Deep setting), setting ID:   97
+NSampInShallow                =           32  %Horizontal discretization, number of discretization points between wire and the center (to the next wire), shallow discretization, setting ID:   98
+NSampInDeep                   =           22  %Horizontal discretization, number of discretization points between wire and the center (to the next wire), deep discretization, setting ID:   99
+NMinLay                       =            0  %Minimum number of discretization points in each layer, setting ID:  100
+PrintKernels                  =            0  %1 -> Print out XYZ discretization, magnetic fields, tip angles, 3D/1D/integrated kernels, 0 -> don't print, setting ID:  101
+ThetaqNo                      =           10  %q number for which tip angle is printed., setting ID:  102
+MRST1/T2                      =   1.0000E+00  %T1/T2 ratio (from 1 to 5), setting ID:  198
+MRSDipRx                      =            0  %0 -> regular receiver loop; 1 -> +x dipole; 2 -> +y dipole, setting ID:  199
+MRSNB1                        =         2000  %Number of B1 used in Bloch solution, setting ID:  205
+MRSB1low                      =  -1.1000E+01  %Lower limit of B1 used in Bloch solution, setting ID:  206
+MRSB1mid                      =  -6.0000E+00  %Midpoint limit of B1 used in Bloch solution (NB1/2 from B1low to B1mid, NB1/2 from B1mid to B1high), setting ID:  207
+MRSB1high                     =  -5.0000E+00  %High limit of B1 used in Bloch solution, setting ID:  208
+MRSNdf                        =          401  %Number of df used in Bloch solution (pick so that 0 is included eg 401 Ndf), setting ID:  209
+MRSdflow                      =  -1.0000E+02  %Low limit of df used in Bloch solution, setting ID:  210
+MRSdfhigh                     =   1.0000E+02  %High limit of df used in Bloch solution, setting ID:  211
+ 
+ %2DHEM
+MaxSizeFwr                    =           48  %Max number of models for forward sectioning, setting ID:  139
+MaxSizeDer                    =           36  %Max number of models for derivative sectioning, setting ID:  140
+NJacobianOffDiag              =            0  %Number of neighbour soundings included in the Jacobian matrix, setting ID:  141
+Overlap                       =            0  %Number of soundings to overlap, setting ID:  142
+ 
+ %3DTEM
+AirConductivity               =   1.0000E-05  %Conductivity assigned to the air, setting ID:  159
+PointsPerDecadeFor            =           30  %Number of points per decade in forward computations, setting ID:  230
+PointsPerDecadeJac            =            6  %Number of points per decade in jacobian computations, setting ID:  231
+StepRateFor                   =            5  %Factor to increase the time step size in forward computations, setting ID:  152
+StepRateJac                   =            5  %Factor to increase the time step size in jacobian computations, setting ID:  169
+StepRateToleranceFor          =   5.0000E-03  %Tolerance for time step updating in forward computations, setting ID:  153
+StepRateToleranceJac          =   4.0000E-02  %Tolerance for time step updating in jacobian computations, setting ID:  160
+StepKeepNumFor                =           10  %Number of times before checking for a time-step increase in forward computations, setting ID:  154
+StepKeepNumJac                =           10  %Number of times before checking for a time-step increase in jacobian computations, setting ID:  161
+dJdt                          =   2.0000E+07  2.0000E+07  2.0000E+07  2.0000E+07  2.0000E+07  %Source waveform vector, setting ID:  155
+ts                            =   1.0000E-08  2.0000E-08  3.0000E-08  4.0000E-08  5.0000E-08  %Times at which dJdt id defined, setting ID:  156
+HorizPadding                  =   1.0000E+02  %Horizontal padding for Jacobian computation (X and Y directions), setting ID:  157
+VerticalPadding               =   4.0000E+02  %Vertical padding for Jacobian computation (Z direction), setting ID:  158
+EulerOrder                    =            2  %Euler order, setting ID:  162
+EMmeshType                    =            1  %Mesh type for automatic 3D EM mesh generation: 1-> tetrahedral; 2-> brick; 3-> octree-brick; 4-> hexahedral; 5-> octree-hexahedral, setting ID:  247
+ForSolverType                 =            1  %Solver type for the forward modeling: 1-> Pardiso; 2-> MUMPS, setting ID:  252
+ 
+ %3DDCIP
+SingularityRemoval            =            1  %1 -> Singularity removal (split potential field), 0 -> Total potential approach, setting ID:  239
+PrimaryFieldAnalytic          =            0  %1 -> Analytical solution to the primary potential field, 0 -> Numerical, setting ID:  240
+FreqNPointsPerDecade          =            5  %Number of points per decade where the FD IP response is computed, setting ID:  241
+FreqUpperDecade               =   4.0000E+00  %The upper limit of decades where the FD IP response is computed, setting ID:  242
+FreqLowerDecade               =  -8.0000E+00  %The lower limit of decades where the FD IP response is computed, setting ID:  243
+JacobianDCThreshold           =   1.0000E-04  %DC theshold used for downsampling of the Jacobian matrix, setting ID:  244
+JacobianIPThreshold           =   1.0000E-05  %IP theshold used for downsampling of the Jacobian matrix, setting ID:  245
+JacobianDownSize              =            1  %1-> Downsize Jacobian; 0-> don't, setting ID:  246
+ 
+ %Sheet
+SheetMinNumFreq               =           10  %The minimum number of frequency calculated, Note that this number is not the actual minimum that will be calculated, that is instead Numfreq, which is adjusted based on the number of threads/NumaNodes to ensure proper loadbalance, setting ID:  188
+SheetPointsPrDecade           =           14  %gives the number of points that are used per decade in the frequency sampling for the sheet. We never allow more sheetpointsprDecade than the number of hankelpoints pr decade (FDenseCSHigh), setting ID:  189
+SheetRefineTol                =   1.0000E-03  %The refinement tolerance being used determines when additional frequencies are calculated as part of the refinement., setting ID:  190
+SheetCellSize                 =   5.0000E+00  %This is the cellsize the code will aim for, but it still has to be within the allowed number of cells., setting ID:  191
+SheetMaxCellSize              =   5.0000E+01  %This is the coarsest cellsize that will be allowed. If approximate meshing is used, this will be the cellsize the program will aim for., setting ID:  192
+SheetMinNCells                =          100  %This is the minimum number of cells allowed., setting ID:  193
+SheetMaxNCells                =         2500  %This is the maximum number of cells allowed., setting ID:  194
+SheetDistThick                =   1.5000E+01  %The distance between sheets in a thick sheet, setting ID:  197
+SheetUsetwopointCoordsys      =            0  %0= No, 1=Yes, setting ID:  195
+SheetPartypeScaling           =   1.0000E+00  %A scaling factor that will be multiplied on the damping of sheet model parameters, setting ID:  196
+SheetMaxStepFactor            =   1.0000E-01  %Sheet MaxStep factpr, setting ID:  228
+ 
+ %MCMC
+MCMCType                      =            0  %0 -> No MCMC; 1 -> MCMC with uniform proposer; 2 -> MCMC with sensitivity matrix-based proposer, setting ID:  134
+MCMCStepFactor                =   1.0000E-01  %Factor for scaling the step length of the model perturbation. Should be tuned to give an acceptance rate around 20-30%, setting ID:  135
+MCMCMaxRelWeight              =   5.0000E+00  %Maximum relative weight to in proposing steps for uncertain parameters. (i.e. N times larger than the best determined), setting ID:  136
+MCMCNoUpdateProps             =         1000  %Number of steps between updating the sensitivity matrix in the proposer. Used only for MCMCType=2, setting ID:  137
+MCMCNoProps                   =        10000  %Number of proposes to run for, setting ID:  138
+ 
+ %BFGS
+BFGSCorrTerms                 =           20  %Number of derivatives stored in the BFGS routine, setting ID:  143
+BFGSInitStepLength            =   1.0000E+00  %Initial step length used in the BFGS, setting ID:  144
+BFGSTolModel                  =   1.0000E-04  %Tolerance of model vector in BFGS, setting ID:  145
+BFGSTolObjective              =   1.0000E-04  %Tolerance of objective function in BFGS, setting ID:  146
+BFGSLinesearchDelta           =   1.0000E-02  %Line search parameter for Wolfe conditions, setting ID:  147
+BFGSLinesearchSigma           =   9.0000E-01  %Line search parameter for Wolfe conditions, setting ID:  148
+BFGSLinesearchTau             =   3.0000E+00  1.0000E-01  5.0000E-01  %Line search parameter for Wolfe conditions - step lengths, setting ID:  149
+BFGSUseAdjointState           =            0  %1 -> Uses the adjoint state method for calculating the derivative of the objective function; 0 -> Uses the Jacobian, setting ID:  172
+ 
+ %AdvancedParallelization
+AffinityMode                  =            0  %Mode of threads binding to cores_ 0 -> Shared mode; 1-> Dedicated mode; 2 -> Manual mode, setting ID:    2
+UseNested                     =            0  %1 ->  nested parallelization, typically only used for NUMA architechture, setting ID:    3
+NCPUOuter                     =          -99  %Number of CPUs to use in outer parallelization, if set to 0 or negative numbers, it get set automatically in InitOpenMP, setting ID:    4
+NUMAdistribute                =            1  %1 -> Distribute across different NUMA nodes; 0-> Keep on NUMA node until full, setting ID:    5
+NXeonPhis                     =            0  %The number of XeonPhis available, setting ID:    6
+NCPUXeon                      =            0  %If we have XeonPhis we specify the number of threads we wish to use on each XeonPhi, setting ID:    7
+NCPUsLow                      =            1  %Some regions of code are memory bandwidth limited in order to not oversaturate these regions we have a lower limit of CPUs to use in these regions, setting ID:    8
+StartThread                   =           -1  %Thread to start the parallelization from; -1 -> it selects a random one, setting ID:    9

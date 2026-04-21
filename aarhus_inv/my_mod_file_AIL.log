@@ -1,0 +1,29 @@
+Mod file found: C:\Users\pamcl\OneDrive - Danmarks Tekniske Universitet\Dokumenter\Projects\Python\pyTEM\aarhus_inv\my_mod_file.mod
+Mo2 file found: C:\Users\pamcl\OneDrive - Danmarks Tekniske Universitet\Dokumenter\Projects\Python\pyTEM\aarhus_inv\my_mod_file.mod
+Path: C:\Users\pamcl\OneDrive - Danmarks Tekniske Universitet\Dokumenter\Projects\Python\pyTEM\aarhus_inv\
+Reading mod file...
+Modfile opened on first attempt!
+DataFileNames.Count > 4
+Modfile ok!
+========== AarhusInv License ==============
+Text0=102 - 1D TEM - Forward modeling & inversion
+Text1=191 - AarhusInv standalone
+Days offline before update is required=30
+Last connection=29-03-2026
+Licence check sum=d5db3b72db3afa28b395a9ce2e193b64
+License Code=mvdaAMc1
+License expires=23-08-2026
+License Number=3495
+Machine GUID={3575E118-5BE0-4E00-A994-BF27E2AE2CA0}
+Machine ID=51dc4f6ebbf1f4d0c4704a7c3f97f8b3
+Number of polygons=0
+Product=AarhusInv
+Update expires=23-08-2026
+=== End of AarhusInv License ==============
+License found in reg dir: AarhusInv
+AarhusInv license number: 3495
+License (AarhusInv) is OK!
+NModules: 2
+NModulesNew: 2
+Saved lic
+ExitCode: 100
