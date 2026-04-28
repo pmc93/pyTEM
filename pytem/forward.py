@@ -30,7 +30,7 @@ Adding a new geometry
 import numpy as np
 from scipy.special import j0, erf
 
-from .filters import MU0, HANKEL_FILTERS, FOURIER_FILTERS, EULER_PARAMS
+from .transform_weights import MU0, HANKEL_FILTERS, FOURIER_FILTERS, EULER_PARAMS
 from .backends import HAS_CUDA, GPU_HANKEL, GPU_FOURIER
 from .recursion import te_reflection_coeff
 from .kernels_numba import (

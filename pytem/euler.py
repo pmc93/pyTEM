@@ -1,5 +1,5 @@
 """
-euler.py — Standalone Euler acceleration for inverse Laplace transform.
+Standalone Euler acceleration for inverse Laplace transform.
 
 This is a reference/verification implementation (Abate & Whitt, 1995).
 The production Euler path in the forward functions uses precomputed

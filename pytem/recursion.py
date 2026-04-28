@@ -3,7 +3,7 @@ recursion.py — TE reflection coefficient via Wait recursion (NumPy).
 """
 
 import numpy as np
-from .filters import MU0
+from .transform_weights import MU0
 
 
 def te_reflection_coeff(lam, omega, thicknesses, resistivities):

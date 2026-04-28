@@ -17,7 +17,7 @@ import time as _time_mod
 
 import numpy as np
 
-from .filters import MU0, HANKEL_FILTERS, FOURIER_FILTERS, EULER_PARAMS
+from .transform_weights import MU0, HANKEL_FILTERS, FOURIER_FILTERS, EULER_PARAMS
 from .backends import HAS_CUDA
 from .kernels_numba import HAS_NUMBA
 from .forward import (fwd_circle_central, fwd_square_central,
@@ -815,7 +815,7 @@ def invert(obs_data, thicknesses, log_resistivities, tx_radius, times,
     def _build_jacobian(log_rho):
         if analytical_j and not _use_waveform:
             # Pure analytical Jacobian — no waveform.
-            return getJ_analytical(
+            return getJ_ana(
                 thicknesses=thicknesses,
                 log_resistivities=log_rho,
                 tx_geom=float(tx_radius),
@@ -844,7 +844,7 @@ def invert(obs_data, thicknesses, log_resistivities, tx_radius, times,
             step_resp = -fwd_circle_central(
                 thicknesses=thicknesses, resistivities=res,
                 times=_step_t, **_fwd_kw)
-            J_anal = getJ_analytical(
+            J_anal = getJ_ana(
                 thicknesses=thicknesses,
                 log_resistivities=log_rho,
                 tx_geom=float(tx_radius),

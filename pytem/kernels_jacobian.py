@@ -35,7 +35,7 @@ When no filter is needed, pass np.ones((n_t, n_eval), dtype=np.complex128).
 """
 
 import numpy as np
-from .filters import MU0
+from .transform_weights import MU0
 from .backends import HAS_CUDA
 
 try:

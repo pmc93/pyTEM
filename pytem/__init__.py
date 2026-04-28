@@ -5,7 +5,7 @@ Supports circular and square loop geometries, central and offset receivers,
 DLF and Euler transforms, with NumPy / Numba / CuPy backends.
 """
 
-from .filters import MU0, HANKEL_FILTERS, FOURIER_FILTERS, EULER_PARAMS
+from .transform_weights import MU0, HANKEL_FILTERS, FOURIER_FILTERS, EULER_PARAMS
 from .backends import HAS_CUDA
 from .kernels_numba import HAS_NUMBA
 from .recursion import te_reflection_coeff, te_reflection_coeff_grad

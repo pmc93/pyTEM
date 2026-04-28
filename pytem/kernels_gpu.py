@@ -13,7 +13,7 @@ complex128. When provided, Hz(omega) is multiplied by H(omega) before
 the final transform. Pass None when no system filter is needed.
 """
 
-from .filters import MU0
+from .transform_weights import MU0
 from .backends import HAS_CUDA
 
 if HAS_CUDA:

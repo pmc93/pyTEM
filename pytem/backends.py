@@ -8,7 +8,7 @@ Provides:
 
 import numpy as np
 
-from .filters import (
+from .transform_weights import (
     _HANKEL_BASE_201, _HANKEL_J0_201, _HANKEL_J1_201,
     _HANKEL_BASE_101, _HANKEL_J0_101, _HANKEL_J1_101,
     _FOURIER_BASE_81, _FOURIER_SIN_81, _FOURIER_COS_81,
