@@ -1,5 +1,5 @@
 ﻿"""
-pytem — 1-D layered-earth TEM forward modelling.
+pyTEM: 1-D layered-earth TEM modelling.
 
 Supports circular and square loop geometries, central and offset receivers,
 DLF and Euler transforms, with NumPy / Numba / CuPy backends.
@@ -22,8 +22,9 @@ from .forward import (
 from .waveform import convolve_waveform
 from .system_filter import butterworth_filter, cascade_filter
 from .euler import euler_invert
-from .inversion import getJ_analytical, getJ, getR, dbdt_to_apprho, getRMS, getAlpha, getAlphas
-from .plotting import TEMPlotter
+from .inversion import (getJ_analytical, getJ, getR, dbdt_to_apprho, getRMS,
+                        getAlpha, getAlphas, invert)
+from .plotter import plot_sounding, plot_model, plot_inversion
 
 from .ip_models import (
     pelton_res_rho,
@@ -70,6 +71,9 @@ __all__ = [
     'getRMS',
     'getAlpha',
     'getAlphas',
+    'invert',
     # Plotting
-    'TEMPlotter',
+    'plot_sounding',
+    'plot_model',
+    'plot_inversion'
 ]

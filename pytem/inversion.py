@@ -7,7 +7,13 @@ Contains:
   - getJ_analytical    : analytical Jacobian (CUDA/Numba/NumPy)
   - dbdt_to_apprho     : dB/dt â†’ apparent resistivity
   - getRMS, getAlpha, getAlphas : inversion helpers
+  - _gn_solve          : Gauss-Newton normal equations solver
+  - _backtrack         : step-halving bound enforcement
+  - _alpha_search      : log-spaced regularisation search with parabola backtrack
+  - invert             : regularised Gauss-Newton inversion loop
 """
+
+import time as _time_mod
 
 import numpy as np
 
@@ -503,4 +509,433 @@ def getJ(thicknesses, log_resistivities, tx_geom, times,
         print(f"WARNING: {bad_count}/{log_resistivities.size} perturbed models had non-positive values (zeroed in J)")
 
     return J
+
+
+# ============================================================
+# Regularised Gauss-Newton inversion helpers
+# ============================================================
+
+def _gn_solve(Jw, dw, R, alpha_vector, m):
+    """Solve the weighted, regularised Gauss-Newton normal equations.
+
+    Solves  (Jw^T Jw + diag(alpha) R) dm = Jw^T dw - diag(alpha) R m
+    via least-squares (robust to mild rank deficiency).
+
+    Parameters
+    ----------
+    Jw           : (n_d, N)  noise-weighted Jacobian
+    dw           : (n_d,)    noise-weighted log-space residuals
+    R            : (N, N)    roughness matrix from getR()
+    alpha_vector : (N,)      per-layer regularisation weights from getAlphas()
+    m            : (N,)      current log-resistivity model
+
+    Returns
+    -------
+    dm : (N,) model update
+    """
+    AR  = np.diag(alpha_vector) @ R
+    lhs = Jw.T @ Jw + AR
+    rhs = Jw.T @ dw - AR @ m
+    dm, _, _, _ = np.linalg.lstsq(lhs, rhs, rcond=1e-10)
+    return dm
+
+
+def _backtrack(m, delta, ln_rho_min, ln_rho_max):
+    """Halve the step length until the trial model is within bounds.
+
+    Parameters
+    ----------
+    m           : (N,) current log-resistivity model
+    delta       : (N,) proposed step
+    ln_rho_min  : float  lower bound in log-resistivity space
+    ln_rho_max  : float  upper bound in log-resistivity space
+
+    Returns
+    -------
+    trial : (N,) new model (clipped to bounds as a last resort)
+    step  : float  accepted step length in [0, 1]
+    """
+    step = 1.0
+    for _ in range(10):
+        trial = m + step * delta
+        if np.all(trial >= ln_rho_min) and np.all(trial <= ln_rho_max):
+            return trial, step
+        step *= 0.5
+    return np.clip(m + step * delta, ln_rho_min, ln_rho_max), step
+
+
+def _alpha_search(alpha_start, alpha_steps, Jw, dw, R, m,
+                  thicknesses, fwd_fn, obs_data, w,
+                  ln_rho_min, ln_rho_max, plot=False):
+    """Log-spaced alpha search with parabola backtrack to RMS = 1.
+
+    Tests ``alpha_steps`` regularisation strengths starting from
+    ``alpha_start`` on a log-spaced ladder defined by ``getAlpha``, evaluates
+    the RMS for each, fits a polynomial, and locates alpha* where RMS = 1.
+
+    Parameters
+    ----------
+    alpha_start  : float      largest (strongest) regularisation to try
+    alpha_steps  : int        number of alpha values on the ladder
+    Jw           : (n_d, N)   noise-weighted Jacobian
+    dw           : (n_d,)     noise-weighted log-space residuals
+    R            : (N, N)     roughness matrix
+    m            : (N,)       current log-resistivity model
+    thicknesses  : (N,)       layer thicknesses for getAlphas() depth weighting
+    fwd_fn       : callable   log_rho -> (n_t,) positive forward response
+    obs_data     : (n_t,)     observed data (positive)
+    w            : (n_t,)     noise weights (1 / noise_log)
+    ln_rho_min   : float
+    ln_rho_max   : float
+    plot         : bool       show alpha-RMS diagnostic figure (default False)
+
+    Returns
+    -------
+    alpha_hist : list of float    tested + parabola alpha values
+    rms_hist   : list of float    corresponding RMS values
+    delta_hist : list of ndarray  corresponding model deltas (m_trial - m)
+    """
+    alpha_hist, rms_hist, delta_hist = [], [], []
+
+    for i in range(alpha_steps):
+        alpha = getAlpha(alpha_start, step=i)
+        avs   = getAlphas(alpha, thicknesses)
+        delta = _gn_solve(Jw, dw, R, avs, m)
+        trial, step = _backtrack(m, delta, ln_rho_min, ln_rho_max)
+        mod   = fwd_fn(trial)
+        valid = (obs_data > 0) & (mod > 0)
+        d_res = np.log(obs_data[valid]) - np.log(mod[valid])
+        rms   = np.sqrt(np.mean((w[valid] * d_res) ** 2))
+        print(f"    alpha = {alpha:.3g},  RMS = {rms:.4f}"
+              + (f"  (step = {step:.2f})" if step < 1.0 else ""))
+        alpha_hist.append(alpha)
+        rms_hist.append(rms)
+        delta_hist.append(trial - m)
+
+        if len(rms_hist) > 1 and rms > rms_hist[-2]:
+            print("    RMS increased — stopping alpha search early.")
+            break
+
+    # Polynomial backtrack to find alpha* where RMS = 1
+    x_data = np.log10(np.array(alpha_hist))
+    y_data = np.array(rms_hist)
+    deg    = min(2, len(x_data) - 1)
+    parabola_alpha = None
+    coeffs         = None
+
+    if deg >= 1 and np.min(y_data) < 1.0:
+        coeffs         = np.polyfit(x_data, y_data, deg)
+        root_c         = coeffs.copy()
+        root_c[-1]    -= 1.0
+        roots          = np.roots(root_c)
+        x_lo, x_hi     = x_data.min() - 1.0, x_data.max() + 1.0
+        real_roots      = roots[np.abs(roots.imag) < 1e-10].real
+        valid_roots     = real_roots[(real_roots >= x_lo) & (real_roots <= x_hi)]
+
+        if valid_roots.size > 0:
+            parabola_x     = float(valid_roots.max())
+            parabola_alpha = 10.0 ** parabola_x
+            avs_par        = getAlphas(parabola_alpha, thicknesses)
+            delta_par      = _gn_solve(Jw, dw, R, avs_par, m)
+            trial_par, step_par = _backtrack(m, delta_par, ln_rho_min, ln_rho_max)
+            mod_par        = fwd_fn(trial_par)
+            valid_par      = (obs_data > 0) & (mod_par > 0)
+            d_par          = np.log(obs_data[valid_par]) - np.log(mod_par[valid_par])
+            rms_par        = np.sqrt(np.mean((w[valid_par] * d_par) ** 2))
+            print(f"    Parabola: alpha* = {parabola_alpha:.3g},  "
+                  f"predicted RMS = 1.00,  actual RMS = {rms_par:.4f}"
+                  + (f"  (step = {step_par:.2f})" if step_par < 1.0 else ""))
+            alpha_hist.append(parabola_alpha)
+            rms_hist.append(rms_par)
+            delta_hist.append(trial_par - m)
+
+    if plot and coeffs is not None:
+        import matplotlib.pyplot as _plt
+        fig, ax = _plt.subplots(figsize=(5, 3.5))
+        x_fit = np.linspace(x_data.min() - 0.5, x_data.max() + 0.5, 300)
+        y_fit = np.polyval(coeffs, x_fit)
+        ax.plot(x_fit, y_fit, '-', color='C0', lw=1.5,
+                label=f'Degree-{deg} fit')
+        ax.plot(x_data, y_data, 'o', color='C1', zorder=5,
+                label='Tested alphas')
+        ax.axhline(1.0, color='k', ls='--', lw=1, label='RMS = 1 target')
+        if parabola_alpha is not None:
+            ax.axvline(np.log10(parabola_alpha), color='C2', ls='--', lw=1,
+                       label=f'$\\alpha^* = {parabola_alpha:.3g}$')
+            ax.plot(np.log10(parabola_alpha), 1.0, '*', color='C2',
+                    markersize=12, zorder=6)
+        ax.set_xlabel('$\\log_{{10}}(\\alpha)$')
+        ax.set_ylabel('RMS')
+        ax.set_title('Alpha search: parabola backtrack')
+        ax.legend(fontsize=8)
+        ax.grid(True, alpha=0.3)
+        fig.tight_layout()
+        _plt.show()
+
+    return alpha_hist, rms_hist, delta_hist
+
+
+# ============================================================
+# Main inversion function
+# ============================================================
+
+def invert(obs_data, thicknesses, log_resistivities, tx_radius, times,
+           alpha_start=None, alpha_steps=5, maxit=20, eps=1e-4,
+           noise_std=0.02, use_numba=True, use_cuda=True,
+           calc_sens=False, store_J=False,
+           transform='euler', hankel_filter='key_101', fourier_filter='key_81',
+           euler_order=11, rho_min=1e-1, rho_max=1e5, max_noise_frac=0.10,
+           plot_alpha=False, analytical_j=True,
+           system_filter=None,
+           waveform_times=None, waveform_currents=None, n_step=200):
+    """Regularised Gauss-Newton inversion for 1-D layered-earth TEM.
+
+    Minimises  phi(m) = ||W (ln d_obs - ln d_pred(m))||^2 + alpha * m^T R m
+    using iterative Gauss-Newton updates with a log-spaced alpha search and
+    parabola backtrack to target RMS = 1.
+
+    All optimisation is performed in log-resistivity space, so the forward
+    function is always evaluated with ``resistivities = exp(m)``.
+
+    System filter
+    -------------
+    Pass ``system_filter`` (a callable H(omega) -> complex array) to apply a
+    frequency-domain instrument response inside the forward model and the
+    analytical Jacobian.  When ``analytical_j=False``, the filter is applied
+    inside ``fwd_circle_central`` automatically; when ``analytical_j=True``,
+    it is passed to ``getJ_analytical``.
+
+    Waveform convolution
+    --------------------
+    When ``waveform_times`` and ``waveform_currents`` are supplied, the step-off
+    response is computed on a dense log-spaced time grid (``n_step`` points)
+    and convolved with the piecewise-linear waveform using
+    ``waveform.convolve_waveform``.  In this mode the Jacobian is always
+    computed by finite differences (``analytical_j`` is ignored), because the
+    linear convolution operator is automatically captured in the FD differences.
+
+    Parameters
+    ----------
+    obs_data            : (n_t,) observed dBz/dt [T/s], positive values
+    thicknesses         : (N,)   layer thicknesses [m]
+    log_resistivities   : (N,)   initial ln(rho) [ln(Ohm.m)]
+    tx_radius           : float  equivalent transmitter radius [m]
+    times               : (n_t,) gate centre times [s]
+    alpha_start         : float or None  starting regularisation strength
+                          (auto-estimated from JTd if None)
+    alpha_steps         : int    number of alpha values per outer iteration
+    maxit               : int    maximum Gauss-Newton iterations
+    eps                 : float  finite-difference step for FD Jacobian
+    noise_std           : float or (n_t,)  fractional noise standard deviation
+    use_numba           : bool   enable Numba JIT backend
+    use_cuda            : bool   enable CuPy GPU backend
+    calc_sens           : bool   compute parameter sensitivity at convergence
+    store_J             : bool   store Jacobian at each iteration
+    transform           : 'dlf' or 'euler'
+    hankel_filter       : str    (default 'key_101')
+    fourier_filter      : str    (default 'key_81')
+    euler_order         : int    (default 11)
+    rho_min             : float  lower resistivity bound [Ohm.m] (default 0.1)
+    rho_max             : float  upper resistivity bound [Ohm.m] (default 1e5)
+    max_noise_frac      : float  noise floor as a fraction of peak data
+    plot_alpha          : bool   show alpha-RMS plot at each iteration
+    analytical_j        : bool   use analytical Jacobian (ignored when waveform)
+    system_filter       : callable or None  H(omega) -> complex
+    waveform_times      : array-like or None  waveform break points [s]
+    waveform_currents   : array-like or None  current at break points [A]
+    n_step              : int    dense time-grid size for waveform convolution
+
+    Returns
+    -------
+    result : dict with keys
+        'log_resistivities' : (N,)         final ln(rho)
+        'resistivities'     : (N,)         final rho [Ohm.m]
+        'thicknesses'       : (N,)         layer thicknesses [m]
+        'model_history'     : list of (N,) all models (initial + each iteration)
+        'rms_history'       : list of float  RMS after each iteration
+        'J_history'         : list of (n_t, N) or None
+        'sensitivity'       : (N,) or None   column-norm of final J
+        'times'             : (n_t,) gate times [s]
+        'obs_data'          : (n_t,) observed data
+        'n_iter'            : int   number of completed iterations
+    """
+    # ---- Parse inputs ----
+    obs_data    = np.asarray(obs_data,          dtype=float)
+    thicknesses = np.asarray(thicknesses,       dtype=float)
+    m           = np.asarray(log_resistivities, dtype=float).copy()
+    times       = np.asarray(times,             dtype=float)
+
+    ln_rho_min = np.log(float(rho_min))
+    ln_rho_max = np.log(float(rho_max))
+
+    # ---- Noise weighting ----
+    if np.isscalar(noise_std):
+        noise_abs = noise_std * np.abs(obs_data)
+    else:
+        noise_abs = np.asarray(noise_std, dtype=float)
+    # Floor: noise cannot be smaller than max_noise_frac * peak |obs|
+    noise_abs = np.maximum(noise_abs, max_noise_frac * np.abs(obs_data).max())
+    # Log-space noise: sigma_log_i = sigma_i / |d_i|
+    noise_log = noise_abs / np.abs(obs_data)
+    w         = 1.0 / noise_log   # weight per datum in log space
+
+    # ---- Waveform convolution setup ----
+    _use_waveform = (waveform_times is not None and waveform_currents is not None)
+    if _use_waveform:
+        from .waveform import convolve_waveform as _convolve
+        _wf_t  = np.asarray(waveform_times,    dtype=float)
+        _wf_I  = np.asarray(waveform_currents, dtype=float)
+        _step_t = np.logspace(
+            np.log10(times.min() * 1e-2),
+            np.log10(times.max() * 10.0),
+            n_step,
+        )
+        if analytical_j:
+            print("INFO: waveform convolution active — using FD Jacobian "
+                  "(analytical_j ignored).")
+
+    _fwd_kw = dict(
+        tx_radius=float(tx_radius),
+        use_numba=use_numba,
+        use_cuda=use_cuda,
+        system_filter=system_filter,
+        transform=transform,
+        hankel_filter=hankel_filter,
+        fourier_filter=fourier_filter,
+        euler_order=euler_order,
+    )
+
+    # ---- Forward model closure ----
+    def _forward_response(log_rho):
+        res = np.exp(log_rho)
+        if _use_waveform:
+            step_resp = -fwd_circle_central(
+                thicknesses=thicknesses, resistivities=res,
+                times=_step_t, **_fwd_kw)
+            return _convolve(_step_t, step_resp, _wf_t, _wf_I, times)
+        return -fwd_circle_central(
+            thicknesses=thicknesses, resistivities=res,
+            times=times, **_fwd_kw)
+
+    # ---- Jacobian closure ----
+    def _build_jacobian(log_rho):
+        if analytical_j and not _use_waveform:
+            return getJ_analytical(
+                thicknesses=thicknesses,
+                log_resistivities=log_rho,
+                tx_geom=float(tx_radius),
+                times=times,
+                use_numba=use_numba,
+                use_cuda=False,
+                system_filter=system_filter,
+                transform=transform,
+                hankel_filter=hankel_filter,
+                fourier_filter=fourier_filter,
+                euler_order=euler_order,
+            )
+        # Finite-difference Jacobian: waveform convolution is included
+        # automatically because _forward_response handles it.
+        f0 = _forward_response(log_rho)
+        J  = np.zeros((f0.size, log_rho.size))
+        for i in range(log_rho.size):
+            pert    = log_rho.copy()
+            h       = eps * max(1.0, abs(log_rho[i]))
+            pert[i] += h
+            fi      = _forward_response(pert)
+            valid   = (f0 > 0) & (fi > 0)
+            J[valid, i] = (np.log(fi[valid]) - np.log(f0[valid])) / h
+        return J
+
+    # ---- Initial alpha heuristic ----
+    print("Building initial Jacobian...")
+    t0 = _time_mod.time()
+    J0 = _build_jacobian(m)
+    d0 = _forward_response(m)
+    print(f"  done ({_time_mod.time() - t0:.1f} s)")
+
+    valid0  = (obs_data > 0) & (d0 > 0)
+    res0    = np.zeros(len(obs_data))
+    res0[valid0] = np.log(obs_data[valid0]) - np.log(d0[valid0])
+    Jw0     = J0 * w[:, None]
+    dw0     = res0 * w
+
+    if alpha_start is None:
+        alpha_start = 10.0 ** np.ceil(
+            np.log10(np.linalg.norm(Jw0.T @ dw0, np.inf) + 1e-30))
+    print(f"alpha_start = {alpha_start:.3g}")
+
+    # ---- Gauss-Newton loop ----
+    rms_history   = []
+    model_history = [m.copy()]
+    J_history     = [J0.copy()] if store_J else []
+    J_cur         = J0
+
+    t_loop = _time_mod.time()
+
+    for it in range(maxit):
+        d_pred = _forward_response(m)
+        valid  = (obs_data > 0) & (d_pred > 0)
+
+        if not np.any(valid):
+            print("WARNING: No valid data — stopping.")
+            break
+
+        res_log         = np.zeros(len(obs_data))
+        res_log[valid]  = np.log(obs_data[valid]) - np.log(d_pred[valid])
+        rms = np.sqrt(np.mean((w[valid] * res_log[valid]) ** 2))
+        rms_history.append(rms)
+
+        elapsed = _time_mod.time() - t_loop
+        print(f"Iteration {it + 1:>3d}:  RMS = {rms:.4f}  ({elapsed:.1f} s)")
+
+        if rms <= 1.0:
+            print("  RMS <= 1 — converged.")
+            break
+
+        if it > 0:
+            J_cur = _build_jacobian(m)
+            if store_J:
+                J_history.append(J_cur.copy())
+
+        R  = getR(m)
+        Jw = J_cur * w[:, None]
+        dw = res_log * w
+
+        alpha_h, rms_h, delta_h = _alpha_search(
+            alpha_start, alpha_steps,
+            Jw, dw, R, m,
+            thicknesses, _forward_response, obs_data, w,
+            ln_rho_min, ln_rho_max,
+            plot=plot_alpha,
+        )
+
+        # Select model update closest to RMS = 1 from below; fall back to min.
+        rms_arr = np.array(rms_h)
+        below   = rms_arr[rms_arr <= 1.0]
+        if below.size > 0:
+            best_idx = int(np.where(rms_arr == below.max())[0][-1])
+        else:
+            best_idx = int(np.argmin(rms_arr))
+
+        m = np.clip(m + delta_h[best_idx], ln_rho_min, ln_rho_max)
+        model_history.append(m.copy())
+
+    # ---- Optional sensitivity ----
+    sensitivity = None
+    if calc_sens:
+        Jf          = _build_jacobian(m)
+        sensitivity = np.sqrt(np.sum(Jf ** 2, axis=0))
+
+    return {
+        'log_resistivities': m,
+        'resistivities':     np.exp(m),
+        'thicknesses':       thicknesses,
+        'model_history':     model_history,
+        'rms_history':       rms_history,
+        'J_history':         J_history if store_J else None,
+        'sensitivity':       sensitivity,
+        'times':             times,
+        'obs_data':          obs_data,
+        'n_iter':            len(rms_history),
+    }
 
