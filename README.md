@@ -14,28 +14,28 @@ pyTEM computes the vertical dB/dt step-off response of a 1-D horizontally layere
 
 ```
 pytem/
-├── filters.py          # Filter coefficients (static data)
-├── recursion.py        # TE reflection coefficient — NumPy reference
-├── backends.py         # CUDA/CuPy detection; GPU filter arrays
-├── kernels_numba.py    # Numba JIT forward kernels
-├── kernels_gpu.py      # CuPy GPU forward kernels
-├── kernels_jacobian.py # Numba + GPU analytical Jacobian kernels
-├── euler.py            # Standalone Euler ILT reference
-├── forward.py          # Public forward model API
-├── system_filter.py    # Instrument frequency-domain filter
-├── waveform.py         # Waveform convolution
-├── inversion.py        # Jacobian + regularised Gauss-Newton inversion
-├── ip_models.py        # Induced polarisation complex resistivity models
-├── plotter.py          # Plotting utilities
-└── __init__.py         # Public API
+├── transform_weights.py  # DLF coefficients and Euler weights (static data)
+├── recursion.py          # TE reflection coefficient — NumPy reference
+├── backends.py           # CUDA/CuPy detection; GPU transform weight arrays
+├── kernels_numba.py      # Numba JIT forward kernels
+├── kernels_gpu.py        # CuPy GPU forward kernels
+├── kernels_jacobian.py   # Numba + GPU analytical Jacobian kernels
+├── euler.py              # Standalone Euler ILT reference
+├── forward.py            # Public forward model API
+├── system_filter.py      # Instrument frequency-domain filter
+├── waveform.py           # Waveform convolution
+├── inversion.py          # Jacobian + regularised Gauss-Newton inversion
+├── ip_models.py          # Induced polarisation complex resistivity models
+├── plotter.py            # Plotting utilities
+└── __init__.py           # Public API
 ```
 
 ---
 
 ## Module descriptions
 
-### `filters.py`
-Pure data module — no computation. Stores the pre-optimised Digital Linear Filter (DLF) coefficients from Key (2009, 2012):
+### `transform_weights.py`
+Pure data module — no computation. Stores the pre-optimised Digital Linear Filter (DLF) coefficients from Key (2009, 2012) and the Euler–Stehfest acceleration weights:
 
 | Registry key | Points | Use |
 |---|---|---|
@@ -44,7 +44,7 @@ Pure data module — no computation. Stores the pre-optimised Digital Linear Fil
 | `key_81` | 81 | Fourier sine/cosine (fast, default) |
 | `key_101` | 101 | Fourier sine/cosine (more accurate) |
 
-Also stores Euler–Stehfest weights at orders 8, 11, 15, 19 (Abate & Whitt 1995), and `MU0 = 4π × 10⁻⁷`.
+Euler–Stehfest weights are stored at orders 8, 11, 15, and 19 (Abate & Whitt 1995). Also stores `MU0 = 4π × 10⁻⁷`.
 
 Exports: `MU0`, `HANKEL_FILTERS`, `FOURIER_FILTERS`, `EULER_PARAMS`
 
@@ -58,7 +58,7 @@ Exports: `te_reflection_coeff`, `te_reflection_coeff_grad`
 ---
 
 ### `backends.py`
-Detects whether CuPy (CUDA) is available at import time. If CUDA is present, pre-transfers all filter arrays to device memory so forward calls pay no Host-to-Device transfer cost.
+Detects whether CuPy (CUDA) is available at import time. If CUDA is present, pre-transfers all transform weight arrays to device memory so forward calls pay no Host-to-Device transfer cost.
 
 Exports: `HAS_CUDA`
 
@@ -91,7 +91,7 @@ Same set of geometry × transform combinations as the forward kernels. All accep
 ---
 
 ### `euler.py`
-Standalone reference implementation of the Euler–Maclaurin inverse Laplace transform (`euler_invert`). Used for verification only; the production path uses precomputed weights from `filters.py`.
+Standalone reference implementation of the Euler–Maclaurin inverse Laplace transform (`euler_invert`). Used for verification only; the production path uses precomputed weights from `transform_weights.py`.
 
 Exports: `euler_invert`
 
