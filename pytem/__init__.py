@@ -1,4 +1,4 @@
-"""
+﻿"""
 pytem — 1-D layered-earth TEM forward modelling.
 
 Supports circular and square loop geometries, central and offset receivers,
@@ -11,12 +11,12 @@ from .kernels_numba import HAS_NUMBA
 from .recursion import te_reflection_coeff, te_reflection_coeff_grad
 
 from .forward import (
-    tem_forward_circle,
-    tem_forward_circle_offset,
-    tem_forward_square,
-    tem_forward_square_offset,
-    halfspace_dbdt_analytic,
-    halfspace_dbdt_offset_analytic,
+    fwd_circle_central,
+    fwd_circle_offset,
+    fwd_square_central,
+    fwd_square_offset,
+    fwd_analytical_central,
+    fwd_analytical_offset,
 )
 
 from .waveform import convolve_waveform
@@ -42,13 +42,13 @@ __all__ = [
     'te_reflection_coeff',
     'te_reflection_coeff_grad',
     # Forward models
-    'tem_forward_circle',
-    'tem_forward_circle_offset',
-    'tem_forward_square',
-    'tem_forward_square_offset',
+    'fwd_circle_central',
+    'fwd_circle_offset',
+    'fwd_square_central',
+    'fwd_square_offset',
     # Analytical
-    'halfspace_dbdt_analytic',
-    'halfspace_dbdt_offset_analytic',
+    'fwd_analytical_central',
+    'fwd_analytical_offset',
     # Waveform & system filter
     'convolve_waveform',
     'butterworth_filter',

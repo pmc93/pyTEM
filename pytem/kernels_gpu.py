@@ -72,15 +72,15 @@ if HAS_CUDA:
     # ------------------------------------------------------------------
     # Fourier DLF GPU — square (VMD area integral)
     # ------------------------------------------------------------------
-    def _tem_square_gpu(times, thicknesses, resistivities, rho_q, area_w,
+    def _tem_square_gpu(times, thicknesses, resistivities, offset_dist_q, area_w,
                         d_h_base, d_h_j0, d_f_base, d_f_sin,
                         filter_weights=None):
         """Square-loop dBz/dt fully on GPU (Fourier DLF + VMD area integral)."""
-        n_q = len(rho_q)
+        n_q = len(offset_dist_q)
         d_times = cp.asarray(times)
         d_thick = cp.asarray(thicknesses, dtype=cp.float64)
         d_rho_lay = cp.asarray(resistivities, dtype=cp.float64)
-        d_rho_q = cp.asarray(rho_q)
+        d_offset_dist_q = cp.asarray(offset_dist_q)
         d_area_w = cp.asarray(area_w)
 
         omega_2d = d_f_base[None, :] / d_times[:, None]
@@ -88,15 +88,13 @@ if HAS_CUDA:
         hz_total = cp.zeros((len(times), n_f), dtype=cp.complex128)
 
         for q in range(n_q):
-            rho = d_rho_q[q]
-            d_lam = d_h_base / rho
+            dist = d_offset_dist_q[q]
+            d_lam = d_h_base / dist
             r_te = _te_reflection_coeff_gpu(d_lam, omega_2d, d_thick, d_rho_lay)
 
             kernel = r_te * (d_lam ** 2)[None, None, :]
-            g = cp.sum(kernel * d_h_j0[None, None, :], axis=2) / rho / (4.0 * cp.pi)
+            g = cp.sum(kernel * d_h_j0[None, None, :], axis=2) / dist / (4.0 * cp.pi)
             hz_total += float(d_area_w[q]) * g
-
-        hz_total *= 4.0
 
         if filter_weights is not None:
             hz_total = hz_total * cp.asarray(filter_weights)
@@ -145,11 +143,11 @@ if HAS_CUDA:
     # ------------------------------------------------------------------
     # Euler GPU — square (VMD area integral)
     # ------------------------------------------------------------------
-    def _tem_square_euler_gpu(times, thicknesses, resistivities, rho_q, area_w,
+    def _tem_square_euler_gpu(times, thicknesses, resistivities, offset_dist_q, area_w,
                               d_h_base, d_h_j0,
                               euler_eta, euler_A, filter_weights=None):
         """Square-loop dBz/dt on GPU via Euler-accelerated Bromwich + VMD integral."""
-        n_q = len(rho_q)
+        n_q = len(offset_dist_q)
         d_times = cp.asarray(times)
         d_thick = cp.asarray(thicknesses, dtype=cp.float64)
         d_rho_lay = cp.asarray(resistivities, dtype=cp.float64)
@@ -167,14 +165,12 @@ if HAS_CUDA:
         hz_total = cp.zeros((n_t, n_euler), dtype=cp.complex128)
 
         for q in range(n_q):
-            rho = float(rho_q[q])
-            d_lam = d_h_base / rho
+            dist = float(offset_dist_q[q])
+            d_lam = d_h_base / dist
             r_te = _te_reflection_coeff_gpu(d_lam, omega_2d, d_thick, d_rho_lay)
             kernel = r_te * (d_lam ** 2)[None, None, :]
-            g = cp.sum(kernel * d_h_j0[None, None, :], axis=2) / rho / (4.0 * cp.pi)
+            g = cp.sum(kernel * d_h_j0[None, None, :], axis=2) / dist / (4.0 * cp.pi)
             hz_total += float(area_w[q]) * g
-
-        hz_total *= 4.0
 
         if filter_weights is not None:
             hz_total = hz_total * cp.asarray(filter_weights)

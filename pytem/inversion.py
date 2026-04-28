@@ -1,25 +1,36 @@
-"""
-inversion.py — Inversion utilities for 1-D layered-earth TEM.
+﻿"""
+inversion.py â€” Inversion utilities for 1-D layered-earth TEM.
 
 Contains:
   - getR               : roughness (smoothness) matrix
   - getJ               : finite-difference Jacobian
   - getJ_analytical    : analytical Jacobian (CUDA/Numba/NumPy)
-  - dbdt_to_apprho     : dB/dt → apparent resistivity
+  - dbdt_to_apprho     : dB/dt â†’ apparent resistivity
   - getRMS, getAlpha, getAlphas : inversion helpers
 """
 
 import numpy as np
 
-from .filters import MU0, HANKEL_FILTERS, FOURIER_FILTERS
+from .filters import MU0, HANKEL_FILTERS, FOURIER_FILTERS, EULER_PARAMS
 from .backends import HAS_CUDA
 from .kernels_numba import HAS_NUMBA
-from .forward import tem_forward_circle, tem_forward_square
+from .forward import (fwd_circle_central, fwd_square_central,
+                      _precompute_filter_dlf, _precompute_filter_euler)
 
-try:
-    import numba
-except ImportError:
-    numba = None
+if HAS_NUMBA:
+    from .kernels_jacobian import (
+        _te_rte_grad_jit,
+        _tem_circular_grad_jit, _tem_square_grad_jit,
+        _tem_circular_grad_euler_jit, _tem_square_grad_euler_jit,
+    )
+
+if HAS_CUDA:
+    import cupy as cp
+    from .kernels_jacobian import (
+        _te_reflection_coeff_grad_gpu,
+        _tem_circular_grad_gpu, _tem_square_grad_gpu,
+        _tem_circular_grad_euler_gpu, _tem_square_grad_euler_gpu,
+    )
 
 
 # ============================================================
@@ -80,267 +91,311 @@ def _te_grad_batch(lam, omegas, thick, rho, xp):
 
 
 # ============================================================
-# Numba JIT kernels
+# Numba JIT kernels live in kernels_jacobian.py (imported above).
+# The functions imported are:
+#   _te_rte_grad_jit              — single-omega adjoint recursion
+#   _tem_circular_grad_jit/euler  — circle DLF / Euler (with filter_weights)
+#   _tem_square_grad_jit/euler    — square DLF / Euler (with filter_weights)
 # ============================================================
 
-if numba is not None:
 
-    @numba.njit(cache=True)
-    def _te_grad_one(lam_c, lam2, omega, thick, sigma, MU0_v):
-        """Single-omega TE gradient. lam_c: complex(K,), lam2: float(K,)."""
-        n_lay = len(sigma)
-        K = len(lam_c)
-        sval = 1j * omega
-
-        Gamma = np.empty((n_lay, K), dtype=np.complex128)
-        dG_a = np.empty((n_lay, K), dtype=np.complex128)
-        for j in range(n_lay):
-            sv = sval * MU0_v * sigma[j]
-            for k in range(K):
-                Gamma[j, k] = np.sqrt(lam2[k] + sv)
-                dG_a[j, k] = -sv / (2.0 * Gamma[j, k])
-
-        r = np.zeros(K, dtype=np.complex128)
-        r_st = np.zeros((n_lay, K), dtype=np.complex128)
-        e_st = np.zeros((n_lay - 1, K), dtype=np.complex128)
-
-        for j in range(n_lay - 2, -1, -1):
-            tj = thick[j]
-            for k in range(K):
-                e_st[j, k] = np.exp(-2.0 * Gamma[j, k] * tj)
-                gs = Gamma[j, k] + Gamma[j+1, k]
-                ps = (Gamma[j, k] - Gamma[j+1, k]) / gs
-                r[k] = e_st[j, k] * (r[k] + ps) / (1.0 + r[k] * ps)
-            for k in range(K):
-                r_st[j, k] = r[k]
-
-        rTE = np.empty(K, dtype=np.complex128)
-        adj = np.empty(K, dtype=np.complex128)
-        dr = np.zeros((n_lay, K), dtype=np.complex128)
-
-        for k in range(K):
-            pa = (lam_c[k] - Gamma[0, k]) / (lam_c[k] + Gamma[0, k])
-            da = 1.0 + r_st[0, k] * pa
-            rTE[k] = (r_st[0, k] + pa) / da
-            adj[k] = (1.0 - pa * pa) / (da * da)
-            dpg = -2.0 * lam_c[k] / ((lam_c[k] + Gamma[0, k]) ** 2)
-            drpa = (1.0 - r_st[0, k] * r_st[0, k]) / (da * da)
-            dr[0, k] += drpa * dpg * dG_a[0, k]
-
-        for j in range(n_lay - 1):
-            tj = thick[j]
-            for k in range(K):
-                rb = r_st[j+1, k]; ej = e_st[j, k]
-                gs = Gamma[j, k] + Gamma[j+1, k]
-                ps = (Gamma[j, k] - Gamma[j+1, k]) / gs
-                den = 1.0 + rb * ps; num = rb + ps
-                drps = ej * (1.0 - rb * rb) / (den * den)
-                dej = -2.0 * tj * ej
-                dr[j, k]   += adj[k] * (dej * num / den + drps * 2.0 * Gamma[j+1, k] / (gs * gs)) * dG_a[j, k]
-                dr[j+1, k] += adj[k] * drps * (-2.0 * Gamma[j, k] / (gs * gs)) * dG_a[j+1, k]
-                adj[k] *= ej * (1.0 - ps * ps) / (den * den)
-
-        return rTE, dr
-
-    @numba.njit(parallel=True, cache=True)
-    def _jac_numba_circ(h_base, h_j1, f_base, f_sin, times,
-                         thick, sigma, a, MU0_v):
-        K = len(h_base); n_f = len(f_base); n_t = len(times); n_lay = len(sigma)
-        lam_c = np.empty(K, dtype=np.complex128)
-        lam2 = np.empty(K, dtype=np.float64)
-        lam_h = np.empty(K, dtype=np.float64)
-        for k in range(K):
-            v = h_base[k] / a
-            lam_c[k] = v + 0j
-            lam2[k] = v * v
-            lam_h[k] = v * h_j1[k]
-
-        dbdt = np.zeros(n_t)
-        d_dbdt = np.zeros((n_lay, n_t))
-
-        for i in numba.prange(n_t):
-            for kf in range(n_f):
-                rTE, drTE = _te_grad_one(lam_c, lam2, f_base[kf] / times[i],
-                                          thick, sigma, MU0_v)
-                hz_im = 0.0
-                for k in range(K):
-                    hz_im += (rTE[k] * lam_h[k]).imag
-                c = 0.5 * MU0_v * f_sin[kf] / times[i]
-                dbdt[i] += hz_im * c
-                for j in range(n_lay):
-                    dh = 0.0
-                    for k in range(K):
-                        dh += (drTE[j, k] * lam_h[k]).imag
-                    d_dbdt[j, i] += dh * c
-
-        return dbdt, d_dbdt
-
-    @numba.njit(parallel=True, cache=True)
-    def _jac_numba_sq(h_base, h_j0, f_base, f_sin, times,
-                       thick, sigma, rho_q, area_w, MU0_v):
-        K = len(h_base); n_f = len(f_base); n_t = len(times)
-        n_lay = len(sigma); n_q = len(rho_q)
-
-        all_lam_c = np.empty((n_q, K), dtype=np.complex128)
-        all_lam2 = np.empty((n_q, K), dtype=np.float64)
-        all_l2h = np.empty((n_q, K), dtype=np.float64)
-        for q in range(n_q):
-            for k in range(K):
-                v = h_base[k] / rho_q[q]
-                all_lam_c[q, k] = v + 0j
-                all_lam2[q, k] = v * v
-                all_l2h[q, k] = v * v * h_j0[k]
-
-        inv_4pi = 1.0 / (4.0 * np.pi)
-        dbdt = np.zeros(n_t)
-        d_dbdt = np.zeros((n_lay, n_t))
-
-        for i in numba.prange(n_t):
-            for kf in range(n_f):
-                omega = f_base[kf] / times[i]
-                hz_im = 0.0
-                dhz_im = np.zeros(n_lay)
-
-                for q in range(n_q):
-                    rTE, drTE = _te_grad_one(all_lam_c[q], all_lam2[q], omega,
-                                              thick, sigma, MU0_v)
-                    g_im = 0.0
-                    for k in range(K):
-                        g_im += (rTE[k] * all_l2h[q, k]).imag
-                    wf = area_w[q] * inv_4pi / rho_q[q]
-                    hz_im += wf * g_im
-
-                    for j in range(n_lay):
-                        dg_im = 0.0
-                        for k in range(K):
-                            dg_im += (drTE[j, k] * all_l2h[q, k]).imag
-                        dhz_im[j] += wf * dg_im
-
-                c = 4.0 * MU0_v * f_sin[kf] / times[i]
-                dbdt[i] += hz_im * c
-                for j in range(n_lay):
-                    d_dbdt[j, i] += dhz_im[j] * c
-
-        return dbdt, d_dbdt
-
-
-# ============================================================
-# Dispatcher: CUDA > Numba > NumPy
-# ============================================================
 
 def getJ_analytical(thicknesses, log_resistivities, tx_geom, times,
-                    fwd=tem_forward_circle, use_cuda=True, use_numba=True,
-                    hankel_filter='key_101', fourier_filter='key_101'):
-    """Analytical Jacobian d(log(-dbdt))/d(ln rho).
-    Three paths: CUDA/CuPy > Numba JIT > NumPy. DLF step-off only.
+                    geometry='circle_central',
+                    rx_offset=0.0, rx_y=0.0, n_quad=5, use_symmetry=True,
+                    use_numba=True, use_cuda=True,
+                    system_filter=None,
+                    transform='dlf', hankel_filter='key_101',
+                    fourier_filter='key_101', euler_order=11):
+    """Analytical Jacobian  d(ln(-dBdt_i)) / d(ln rho_j)  for all loop geometries.
+
+    Uses the adjoint Wait recursion: a single forward+backward pass per
+    quadrature frequency yields gradients for all N layers simultaneously.
+
+    Transform modes
+    ---------------
+    'dlf'   — Digital Linear Filter Fourier transform (default).
+    'euler' — Euler-Stehfest inverse Laplace transform.  All backends
+              (NumPy / Numba / CUDA) share the same adjoint recursion.
+
+    Supported geometries
+    --------------------
+    'circle_central'  — Rx at centre of circular Tx loop (default)
+    'circle_offset'   — Rx at radial offset rx_offset from circular Tx
+    'square_central'  — Rx at centre of square Tx loop
+    'square_offset'   — Rx at (rx_offset, rx_y) offset from square Tx centre
+
+    Backend strategy
+    ----------------
+    NumPy   : All n_f frequencies batched into a single _te_grad_batch call
+              per gate time so the inner Wait recursion runs in NumPy's C
+              layer.  A Python for-loop over frequencies would add n_f
+              function-call overheads; batching eliminates them entirely.
+    Numba   : Scalar loops compiled to SIMD machine code via JIT; prange
+              over gate times achieves CPU parallelism.  Tight scalar loops
+              beat NumPy broadcasting inside JIT because large intermediate
+              arrays exceed L2 cache for typical problem sizes.
+    GPU     : Full (n_t, n_f, K) tensor batched in one CuPy operation to
+              saturate GPU occupancy.  Per-frequency launches would leave
+              most warps idle.
+
+    System filter
+    -------------
+    system_filter is applied in the frequency domain before the imaginary
+    (DLF) or real (Euler) part is taken.  Since H(omega) is independent of
+    resistivity, it multiplies the gradient kernel identically:
+        d/d(ln rho_j) [H * K] = H * dK/d(ln rho_j)
+
+    Parameters
+    ----------
+    thicknesses       : (N-1,) layer thicknesses [m]
+    log_resistivities : (N,)   ln(rho_j)
+    tx_geom           : float  equivalent circle radius [m]
+    times             : (n_t,) gate times [s]
+    geometry          : str    loop geometry (default 'circle_central')
+    rx_offset         : float  receiver radial / x-offset [m] (default 0.0)
+    rx_y              : float  receiver y-offset for square_offset [m]
+    n_quad            : int    Gauss-Legendre order for square geometries
+    use_symmetry      : bool   exploit x<->y symmetry for square_central
+    use_numba         : bool   Numba JIT backend (default True)
+    use_cuda          : bool   CuPy GPU backend  (default True)
+    system_filter     : callable or None  H(omega) -> complex (default None)
+    transform         : 'dlf' or 'euler'
+    hankel_filter     : str   (default 'key_101')
+    fourier_filter    : str   (default 'key_101') — DLF only
+    euler_order       : int   8, 11, 15, or 19 (default 11) — Euler only
+
+    Returns
+    -------
+    J : (n_t, N) float64
     """
-    thicknesses = np.asarray(thicknesses, dtype=float)
+    from scipy.special import j0 as _j0
+
+    thicknesses   = np.asarray(thicknesses, dtype=float)
     resistivities = np.exp(np.asarray(log_resistivities, dtype=float))
-    times = np.asarray(times, dtype=float)
-    n_lay = len(resistivities); n_t = len(times)
+    times         = np.asarray(times, dtype=float)
+    a             = float(tx_geom)
+    n_lay         = len(resistivities)
+    n_t           = len(times)
+
     h_base, h_j0, h_j1 = HANKEL_FILTERS[hankel_filter]
-    f_base, f_sin, f_cos = FOURIER_FILTERS[fourier_filter]
-    n_f = len(f_base)
+    _use_euler = (transform == 'euler')
 
-    # Quadrature for square loop
-    if fwd is tem_forward_square:
-        L = float(tx_geom); hs = L / 2.0; n_quad = 5
-        gl_n, gl_w = np.polynomial.legendre.leggauss(n_quad)
-        x_pts = hs / 2.0 * (1.0 + gl_n); w_pts = gl_w * hs / 2.0
-        rho_q_l, area_w_l = [], []
-        for ii in range(n_quad):
-            for jj in range(ii, n_quad):
-                w = w_pts[ii] * w_pts[jj]
-                if ii != jj: w *= 2.0
-                rho_q_l.append(np.sqrt(x_pts[ii]**2 + x_pts[jj]**2))
-                area_w_l.append(w)
-        rho_q = np.asarray(rho_q_l); area_w = np.asarray(area_w_l)
-
-    # ---- PATH 1: CUDA GPU ----
-    if HAS_CUDA and use_cuda:
-        import cupy as cp
-        d_rho = cp.asarray(resistivities)
-        d_f_sin = cp.asarray(f_sin)
-        d_times = cp.asarray(times)
-        all_om = (f_base[None, :] / times[:, None]).ravel()
-        d_om = cp.asarray(all_om); M = len(all_om)
-
-        if fwd is tem_forward_square:
-            d_h_j0 = cp.asarray(h_j0)
-            hz = cp.zeros(M, dtype=cp.complex128)
-            dhz = cp.zeros((n_lay, M), dtype=cp.complex128)
-            for q in range(len(rho_q)):
-                d_lam = cp.asarray(h_base / rho_q[q])
-                l2h = d_lam ** 2 * d_h_j0
-                rte, drte = _te_grad_batch(d_lam, d_om, thicknesses, d_rho, cp)
-                wf = float(area_w[q]) / float(rho_q[q]) / (4.0 * np.pi)
-                hz  += wf * cp.sum(rte * l2h[None, :], axis=1)
-                dhz += wf * cp.sum(drte * l2h[None, None, :], axis=2)
-            hz *= 4.0; dhz *= 4.0
-        else:
-            a = float(tx_geom)
-            d_lam = cp.asarray(h_base / a)
-            l_h = d_lam * cp.asarray(h_j1)
-            rte, drte = _te_grad_batch(d_lam, d_om, thicknesses, d_rho, cp)
-            hz  = 0.5 * cp.sum(rte * l_h[None, :], axis=1)
-            dhz = 0.5 * cp.sum(drte * l_h[None, None, :], axis=2)
-
-        sig = (MU0 * cp.imag(hz)).reshape(n_t, n_f)
-        dsig = (MU0 * cp.imag(dhz)).reshape(n_lay, n_t, n_f)
-        dbdt = cp.asnumpy(cp.sum(sig * d_f_sin[None, :], axis=1) / d_times) * (2.0 / np.pi)
-        d_dbdt = cp.asnumpy(
-            cp.sum(dsig * d_f_sin[None, None, :], axis=2) / d_times[None, :]
-        ) * (2.0 / np.pi)
-
-    # ---- PATH 2: Numba JIT ----
-    elif HAS_NUMBA and use_numba:
-        sigma_c = (1.0 / resistivities).astype(np.complex128)
-        if fwd is tem_forward_square:
-            dbdt, d_dbdt = _jac_numba_sq(h_base, h_j0, f_base, f_sin, times,
-                                          thicknesses, sigma_c, rho_q, area_w, MU0)
-        else:
-            dbdt, d_dbdt = _jac_numba_circ(h_base, h_j1, f_base, f_sin, times,
-                                            thicknesses, sigma_c, float(tx_geom), MU0)
-        dbdt *= (2.0 / np.pi); d_dbdt *= (2.0 / np.pi)
-
-    # ---- PATH 3: Pure NumPy ----
+    if _use_euler:
+        e_eta, e_A = EULER_PARAMS[euler_order]
     else:
-        dbdt = np.zeros(n_t); d_dbdt = np.zeros((n_lay, n_t))
-        if fwd is tem_forward_square:
-            for i in range(n_t):
-                omegas = f_base / times[i]
-                hz = np.zeros(n_f, dtype=complex); dhz = np.zeros((n_lay, n_f), dtype=complex)
-                for q in range(len(rho_q)):
-                    lam = h_base / rho_q[q]; lam2 = lam ** 2
-                    rte, drte = _te_grad_batch(lam, omegas, thicknesses, resistivities, np)
-                    hz  += area_w[q] * np.sum(rte * lam2[None, :] * h_j0[None, :], axis=1) / rho_q[q] / (4.0 * np.pi)
-                    dhz += area_w[q] * np.sum(drte * lam2[None, None, :] * h_j0[None, None, :], axis=2) / rho_q[q] / (4.0 * np.pi)
-                hz *= 4.0; dhz *= 4.0
-                sig = MU0 * np.imag(hz); dsig = MU0 * np.imag(dhz)
-                dbdt[i] = np.dot(sig, f_sin) / times[i]
-                d_dbdt[:, i] = np.sum(dsig * f_sin[None, :], axis=1) / times[i]
-        else:
-            a = float(tx_geom); lam = h_base / a
-            for i in range(n_t):
-                omegas = f_base / times[i]
-                rte, drte = _te_grad_batch(lam, omegas, thicknesses, resistivities, np)
-                hz = 0.5 * np.sum(rte * lam[None, :] * h_j1[None, :], axis=1)
-                dhz = 0.5 * np.sum(drte * lam[None, None, :] * h_j1[None, None, :], axis=2)
-                sig = MU0 * np.imag(hz); dsig = MU0 * np.imag(dhz)
-                dbdt[i] = np.dot(sig, f_sin) / times[i]
-                d_dbdt[:, i] = np.sum(dsig * f_sin[None, :], axis=1) / times[i]
-        dbdt *= (2.0 / np.pi); d_dbdt *= (2.0 / np.pi)
+        f_base, f_sin, _ = FOURIER_FILTERS[fourier_filter]
 
-    # Log-space Jacobian
+    # ---- Geometry-specific pre-computation ----
+    _is_circle = geometry in ('circle_central', 'circle_offset')
+
+    if geometry == 'circle_central':
+        lam      = h_base / a
+        lam_kern = lam * h_j1
+
+    elif geometry == 'circle_offset':
+        lam      = h_base / a
+        j0_vals  = _j0(lam * float(rx_offset))
+        lam_kern = lam * j0_vals * h_j1
+
+    elif geometry == 'square_central':
+        side  = a * np.sqrt(np.pi)
+        hs    = side / 2.0
+        gl_nodes, gl_weights = np.polynomial.legendre.leggauss(n_quad)
+        x_pts = hs / 2.0 * (1.0 + gl_nodes)
+        w_pts = gl_weights * hs / 2.0
+        if use_symmetry:
+            rho_q_l, area_w_l = [], []
+            for _i in range(n_quad):
+                for _jj in range(_i, n_quad):
+                    w = w_pts[_i] * w_pts[_jj]
+                    if _i != _jj:
+                        w *= 2.0
+                    rho_q_l.append(np.sqrt(x_pts[_i]**2 + x_pts[_jj]**2))
+                    area_w_l.append(w)
+            rho_q  = np.array(rho_q_l)
+            area_w = np.array(area_w_l)
+        else:
+            _xx, _yy = np.meshgrid(x_pts, x_pts)
+            _wx, _wy = np.meshgrid(w_pts, w_pts)
+            rho_q  = np.sqrt(_xx.ravel()**2 + _yy.ravel()**2)
+            area_w = (_wx * _wy).ravel()
+        quad_scale = 4.0
+
+    elif geometry == 'square_offset':
+        side  = a * np.sqrt(np.pi)
+        hs    = side / 2.0
+        gl_nodes, gl_weights = np.polynomial.legendre.leggauss(n_quad)
+        x_pts = hs * gl_nodes
+        wx    = hs * gl_weights
+        _xx, _yy = np.meshgrid(x_pts, x_pts, indexing='xy')
+        _wx, _wy = np.meshgrid(wx, wx, indexing='xy')
+        rho_q  = np.sqrt((_xx.ravel() - float(rx_offset))**2 +
+                         (_yy.ravel() - float(rx_y))**2)
+        rho_q  = np.maximum(rho_q, 1e-6)
+        area_w = (_wx * _wy).ravel()
+        quad_scale = 1.0
+
+    else:
+        raise ValueError(
+            f"Unknown geometry '{geometry}'. Choose from: "
+            "'circle_central', 'circle_offset', 'square_central', 'square_offset'.")
+
+    # ---- Pre-evaluate system filter at all transform frequencies ----
+    # When system_filter is None, ones are used (no effect on the integrals).
+    # For DLF:   filter_weights[i, k] = H(f_base[k] / times[i]),  shape (n_t, n_f).
+    # For Euler: filter_weights[i, k] = H(omega_k(times[i])),      shape (n_t, n_eval).
+    if _use_euler:
+        n_eval = len(e_eta)
+        filter_weights = (_precompute_filter_euler(system_filter, times, e_eta, e_A)
+                          if system_filter is not None
+                          else np.ones((n_t, n_eval), dtype=np.complex128))
+    else:
+        n_f = len(f_base)
+        filter_weights = (_precompute_filter_dlf(system_filter, times, f_base)
+                          if system_filter is not None
+                          else np.ones((n_t, n_f), dtype=np.complex128))
+
+    # ---- Backend dispatch: CUDA > Numba > NumPy ----
+    _use_nb  = HAS_NUMBA and use_numba
+    _use_gpu = HAS_CUDA  and use_cuda and not _use_nb
+
+    if _use_nb:
+        # Numba path — scalar loops JIT-compiled to SIMD + prange over gates.
+        # filter_weights passed as complex128 array; Numba handles arithmetic natively.
+        if _use_euler:
+            if _is_circle:
+                dbdt, J_raw = _tem_circular_grad_euler_jit(
+                    times, thicknesses, resistivities, lam, lam_kern, MU0,
+                    e_eta, e_A, filter_weights)
+            else:
+                dbdt, J_raw = _tem_square_grad_euler_jit(
+                    times, thicknesses, resistivities,
+                    rho_q, area_w, float(quad_scale),
+                    h_base, h_j0, MU0, e_eta, e_A, filter_weights)
+        else:
+            if _is_circle:
+                dbdt, J_raw = _tem_circular_grad_jit(
+                    times, thicknesses, resistivities, lam, lam_kern, MU0,
+                    f_base, f_sin, filter_weights)
+            else:
+                dbdt, J_raw = _tem_square_grad_jit(
+                    times, thicknesses, resistivities,
+                    rho_q, area_w, float(quad_scale),
+                    h_base, h_j0, MU0, f_base, f_sin, filter_weights)
+
+    elif _use_gpu:
+        # GPU path — full (n_t, n_f, K) tensor batched in one CuPy operation.
+        # d_filter_weights transferred to GPU; CuPy handles complex128 natively.
+        d_h_base         = cp.asarray(h_base)
+        d_filter_weights = cp.asarray(filter_weights)
+        if _use_euler:
+            if _is_circle:
+                dbdt, J_raw = _tem_circular_grad_euler_gpu(
+                    times, thicknesses, resistivities, a, lam_kern,
+                    d_h_base, e_eta, e_A, d_filter_weights)
+            else:
+                d_h_j0 = cp.asarray(h_j0)
+                dbdt, J_raw = _tem_square_grad_euler_gpu(
+                    times, thicknesses, resistivities,
+                    rho_q, area_w, float(quad_scale),
+                    d_h_base, d_h_j0, e_eta, e_A, d_filter_weights)
+        else:
+            d_f_base = cp.asarray(f_base)
+            d_f_sin  = cp.asarray(f_sin)
+            if _is_circle:
+                dbdt, J_raw = _tem_circular_grad_gpu(
+                    times, thicknesses, resistivities, a, lam_kern,
+                    d_h_base, d_f_base, d_f_sin, d_filter_weights)
+            else:
+                d_h_j0 = cp.asarray(h_j0)
+                dbdt, J_raw = _tem_square_grad_gpu(
+                    times, thicknesses, resistivities,
+                    rho_q, area_w, float(quad_scale),
+                    d_h_base, d_h_j0, d_f_base, d_f_sin, d_filter_weights)
+
+    else:
+        # NumPy path — all n_f frequencies batched into one _te_grad_batch call
+        # per gate time.  _te_grad_batch(lam, omega_arr, thick, rho, np) returns
+        # r_TE (M, K) and dr_TE (N, M, K), keeping inner loops in NumPy's C layer.
+        dbdt  = np.zeros(n_t)
+        J_raw = np.zeros((n_t, n_lay))
+
+        if _use_euler:
+            k_arr   = np.arange(len(e_eta), dtype=float)
+            signs_k = (-1.0)**k_arr * e_eta                 # (n_eval,)
+            for i, t in enumerate(times):
+                c         = e_A / (2.0 * t)
+                h_step    = np.pi / t
+                omega_arr = k_arr * h_step - c * 1j          # (n_eval,) complex
+                fw        = filter_weights[i]                 # (n_eval,) complex
+                if _is_circle:
+                    r_TE, dr_TE = _te_grad_batch(lam, omega_arr, thicknesses, resistivities, np)
+                    # r_TE: (n_eval, K),  dr_TE: (N, n_eval, K)
+                    hz_c  = 0.5 * (r_TE  * lam_kern[None, :]).sum(-1)         # (n_eval,)
+                    dhz_c = 0.5 * (dr_TE * lam_kern[None, None, :]).sum(-1)   # (N, n_eval)
+                else:
+                    hz_c  = np.zeros(len(omega_arr), dtype=complex)
+                    dhz_c = np.zeros((n_lay, len(omega_arr)), dtype=complex)
+                    for q in range(len(rho_q)):
+                        rq     = rho_q[q];  wq = area_w[q]
+                        lam_q  = h_base / rq
+                        kern_q = lam_q**2 * h_j0 / (rq * 4.0 * np.pi)
+                        r_q, dr_q = _te_grad_batch(lam_q, omega_arr, thicknesses, resistivities, np)
+                        hz_c  += wq * (r_q  * kern_q[None, :]).sum(-1)
+                        dhz_c += wq * (dr_q * kern_q[None, None, :]).sum(-1)
+                    hz_c  *= quad_scale
+                    dhz_c *= quad_scale
+                # Apply filter, then Euler dot product
+                hz_acc  = MU0 * np.dot(signs_k, (hz_c  * fw).real)         # scalar
+                dhz_acc = MU0 * ((dhz_c * fw[None, :]).real @ signs_k)     # (N,)
+                prefac      = np.exp(e_A / 2.0) / t
+                dbdt[i]     = -prefac * hz_acc
+                J_raw[i, :] = -prefac * dhz_acc
+
+        else:
+            for i, t in enumerate(times):
+                omega_arr = f_base / t      # (n_f,) — all frequencies at once
+                fw        = filter_weights[i]  # (n_f,) complex
+                if _is_circle:
+                    r_TE, dr_TE = _te_grad_batch(lam, omega_arr, thicknesses, resistivities, np)
+                    # r_TE: (n_f, K),  dr_TE: (N, n_f, K)
+                    hz_c  = 0.5 * (r_TE  * lam_kern[None, :]).sum(-1)         # (n_f,)
+                    dhz_c = 0.5 * (dr_TE * lam_kern[None, None, :]).sum(-1)   # (N, n_f)
+                else:
+                    hz_c  = np.zeros(len(omega_arr), dtype=complex)
+                    dhz_c = np.zeros((n_lay, len(omega_arr)), dtype=complex)
+                    for q in range(len(rho_q)):
+                        rq     = rho_q[q];  wq = area_w[q]
+                        lam_q  = h_base / rq
+                        kern_q = lam_q**2 * h_j0 / (rq * 4.0 * np.pi)
+                        r_q, dr_q = _te_grad_batch(lam_q, omega_arr, thicknesses, resistivities, np)
+                        hz_c  += wq * (r_q  * kern_q[None, :]).sum(-1)
+                        dhz_c += wq * (dr_q * kern_q[None, None, :]).sum(-1)
+                    hz_c  *= quad_scale
+                    dhz_c *= quad_scale
+                # Apply filter, then Fourier dot product
+                hz_im  = MU0 * (hz_c  * fw).imag           # (n_f,) real
+                dhz_im = MU0 * (dhz_c * fw[None, :]).imag  # (N, n_f) real
+                dbdt[i]     = np.dot(hz_im, f_sin) / t
+                J_raw[i, :] = (dhz_im @ f_sin) / t
+
+    # DLF: normalise by 2/pi.  Euler kernels incorporate exp(A/2)/t and the
+    # step-off sign (-1) internally, so no further scaling is needed.
+    if not _use_euler:
+        scale  = 2.0 / np.pi
+        dbdt  *= scale
+        J_raw *= scale
+
     f0 = -dbdt
-    bad = f0 <= 0
-    if np.any(bad):
-        print(f"WARNING: {bad.sum()} non-positive values (zeroed in J)")
-    J = np.zeros((n_t, n_lay))
+    if np.any(f0 <= 0):
+        print(f"WARNING: {(f0 <= 0).sum()} non-positive dbdt values (zeroed in J)")
+    J     = np.zeros((n_t, n_lay))
     valid = f0 > 0
-    for j in range(n_lay):
-        J[valid, j] = d_dbdt[j, valid] / dbdt[valid]
+    J[valid, :] = -J_raw[valid, :] / f0[valid, None]
+    np.nan_to_num(J, copy=False, nan=0.0, posinf=0.0, neginf=0.0)
     return J
+
 
 
 def dbdt_to_apprho(obs_data, tx_area, times):
@@ -351,14 +406,14 @@ def dbdt_to_apprho(obs_data, tx_area, times):
     obs_data : array_like
         Observed dB/dt values [T/s].
     tx_area  : float
-        Transmitter moment (current × area) [A·m²].
+        Transmitter moment (current Ã— area) [AÂ·mÂ²].
     times    : array_like
         Gate centre times [s].
 
     Returns
     -------
     rho_a : ndarray
-        Apparent resistivity [Ohm·m].
+        Apparent resistivity [OhmÂ·m].
     """
     M = tx_area
     term = (2 * MU0 * M) / (5 * times * obs_data)
@@ -407,15 +462,15 @@ def getR(resistivities, damp=1e-4):
 
 
 def getJ(thicknesses, log_resistivities, tx_geom, times,
-         use_numba=False, use_cuda=True, eps=1e-4, fwd=tem_forward_circle,
-         transform='dlf', hankel_filter='key_201', fourier_filter='key_81',
+         use_numba=False, use_cuda=True, eps=1e-4, fwd=fwd_circle_central,
+         transform='dlf', hankel_filter='key_201', fourier_filter='key_101',
          euler_order=11):
     """Finite-difference Jacobian d(log(-dBdt))/d(ln rho)."""
     fwd_kw = dict(use_numba=use_numba, use_cuda=use_cuda, transform=transform,
                   hankel_filter=hankel_filter, fourier_filter=fourier_filter,
                   euler_order=euler_order)
 
-    if fwd is tem_forward_square:
+    if fwd is fwd_square_central:
         f0 = -fwd(thicknesses=thicknesses, resistivities=np.exp(log_resistivities),
                   side_length=tx_geom, times=times, **fwd_kw)
     else:
@@ -432,7 +487,7 @@ def getJ(thicknesses, log_resistivities, tx_geom, times,
         perturbed = log_resistivities.copy()
         step = eps * max(1.0, abs(log_resistivities[i]))
         perturbed[i] += step
-        if fwd is tem_forward_square:
+        if fwd is fwd_square_central:
             fi = -fwd(thicknesses=thicknesses, resistivities=np.exp(perturbed),
                       side_length=tx_geom, times=times, **fwd_kw)
         else:
@@ -448,3 +503,4 @@ def getJ(thicknesses, log_resistivities, tx_geom, times,
         print(f"WARNING: {bad_count}/{log_resistivities.size} perturbed models had non-positive values (zeroed in J)")
 
     return J
+
