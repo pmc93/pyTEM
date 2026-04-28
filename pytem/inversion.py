@@ -95,7 +95,6 @@ def _te_grad_batch(lam, omegas, thick, rho, xp):
 
     return r_TE, dr
 
-
 # ============================================================
 # Numba JIT kernels live in kernels_jacobian.py (imported above).
 # The functions imported are:
@@ -104,15 +103,13 @@ def _te_grad_batch(lam, omegas, thick, rho, xp):
 #   _tem_square_grad_jit/euler    — square DLF / Euler (with filter_weights)
 # ============================================================
 
-
-
-def getJ_analytical(thicknesses, log_resistivities, tx_geom, times,
-                    geometry='circle_central',
-                    rx_offset=0.0, rx_y=0.0, n_quad=5, use_symmetry=True,
-                    use_numba=True, use_cuda=True,
-                    system_filter=None,
-                    transform='dlf', hankel_filter='key_101',
-                    fourier_filter='key_101', euler_order=11):
+def getJ_ana(thicknesses, log_resistivities, tx_geom, times,
+             geometry='circle_central',
+             rx_offset=0.0, rx_y=0.0, n_quad=5, use_symmetry=True,
+             use_numba=True, use_cuda=True,
+             system_filter=None,
+             transform='dlf', hankel_filter='key_101',
+             fourier_filter='key_101', euler_order=11):
     """Analytical Jacobian  d(ln(-dBdt_i)) / d(ln rho_j)  for all loop geometries.
 
     Uses the adjoint Wait recursion: a single forward+backward pass per
@@ -467,10 +464,10 @@ def getR(resistivities, damp=1e-4):
     return R
 
 
-def getJ(thicknesses, log_resistivities, tx_geom, times,
-         use_numba=False, use_cuda=True, eps=1e-4, fwd=fwd_circle_central,
-         transform='dlf', hankel_filter='key_201', fourier_filter='key_101',
-         euler_order=11):
+def getJ_fd(thicknesses, log_resistivities, tx_geom, times,
+            use_numba=False, use_cuda=True, eps=1e-4, fwd=fwd_circle_central,
+            transform='dlf', hankel_filter='key_201', fourier_filter='key_101',
+            euler_order=11):
     """Finite-difference Jacobian d(log(-dBdt))/d(ln rho)."""
     fwd_kw = dict(use_numba=use_numba, use_cuda=use_cuda, transform=transform,
                   hankel_filter=hankel_filter, fourier_filter=fourier_filter,
@@ -509,7 +506,6 @@ def getJ(thicknesses, log_resistivities, tx_geom, times,
         print(f"WARNING: {bad_count}/{log_resistivities.size} perturbed models had non-positive values (zeroed in J)")
 
     return J
-
 
 # ============================================================
 # Regularised Gauss-Newton inversion helpers
@@ -790,9 +786,7 @@ def invert(obs_data, thicknesses, log_resistivities, tx_radius, times,
             np.log10(times.max() * 10.0),
             n_step,
         )
-        if analytical_j:
-            print("INFO: waveform convolution active — using FD Jacobian "
-                  "(analytical_j ignored).")
+
 
     _fwd_kw = dict(
         tx_radius=float(tx_radius),
@@ -820,6 +814,7 @@ def invert(obs_data, thicknesses, log_resistivities, tx_radius, times,
     # ---- Jacobian closure ----
     def _build_jacobian(log_rho):
         if analytical_j and not _use_waveform:
+            # Pure analytical Jacobian — no waveform.
             return getJ_analytical(
                 thicknesses=thicknesses,
                 log_resistivities=log_rho,
@@ -833,6 +828,44 @@ def invert(obs_data, thicknesses, log_resistivities, tx_radius, times,
                 fourier_filter=fourier_filter,
                 euler_order=euler_order,
             )
+
+        if analytical_j and _use_waveform:
+            # Analytical Jacobian with waveform convolution.
+            #
+            # The convolution G_i = conv(F, w)_i is linear in F, so:
+            #   dG_i/d(ln rho_j) = conv(dF/d(ln rho_j), w)_i
+            #
+            # getJ_analytical returns J_anal[k,j] = d ln(F(t_k)) / d ln(rho_j)
+            # so the absolute gradient is: dF(t_k)/d(ln rho_j) = J_anal[k,j] * F(t_k)
+            #
+            # Then the log-space Jacobian of the convolved response:
+            #   J_conv[i,j] = dG_i/d(ln rho_j) / G_i
+            res       = np.exp(log_rho)
+            step_resp = -fwd_circle_central(
+                thicknesses=thicknesses, resistivities=res,
+                times=_step_t, **_fwd_kw)
+            J_anal = getJ_analytical(
+                thicknesses=thicknesses,
+                log_resistivities=log_rho,
+                tx_geom=float(tx_radius),
+                times=_step_t,
+                use_numba=use_numba,
+                use_cuda=False,
+                system_filter=system_filter,
+                transform=transform,
+                hankel_filter=hankel_filter,
+                fourier_filter=fourier_filter,
+                euler_order=euler_order,
+            )  # (n_step, N)
+            G = _convolve(_step_t, step_resp, _wf_t, _wf_I, times)  # (n_t,)
+            J_conv = np.zeros((len(times), log_rho.size))
+            valid_g = G > 0
+            for j in range(log_rho.size):
+                dF_j = J_anal[:, j] * step_resp          # absolute gradient on dense grid
+                dG_j = _convolve(_step_t, dF_j, _wf_t, _wf_I, times)
+                J_conv[valid_g, j] = dG_j[valid_g] / G[valid_g]
+            return J_conv
+
         # Finite-difference Jacobian: waveform convolution is included
         # automatically because _forward_response handles it.
         f0 = _forward_response(log_rho)

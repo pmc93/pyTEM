@@ -22,7 +22,7 @@ from .forward import (
 from .waveform import convolve_waveform
 from .system_filter import butterworth_filter, cascade_filter
 from .euler import euler_invert
-from .inversion import (getJ_analytical, getJ, getR, dbdt_to_apprho, getRMS,
+from .inversion import (getJ_ana, getJ_fd, getR, dbdt_to_apprho, getRMS,
                         getAlpha, getAlphas, invert)
 from .plotter import plot_sounding, plot_model, plot_inversion
 
@@ -64,8 +64,8 @@ __all__ = [
     # Euler (verification)
     'euler_invert',
     # Inversion
-    'getJ_analytical',
-    'getJ',
+    'getJ_ana',
+    'getJ_fd',
     'getR',
     'dbdt_to_apprho',
     'getRMS',
