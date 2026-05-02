@@ -609,7 +609,7 @@ def _alpha_search(alpha_start, alpha_steps, Jw, dw, R, m,
         valid = (obs_data > 0) & (mod > 0)
         d_res = np.log(obs_data[valid]) - np.log(mod[valid])
         rms   = np.sqrt(np.mean((w[valid] * d_res) ** 2))
-        print(f"    alpha = {alpha:.3g},  RMS = {rms:.4f}"
+        print(f"    alpha = {alpha:.3f},  RMS = {rms:.4f}"
               + (f"  (step = {step:.2f})" if step < 1.0 else ""))
         alpha_hist.append(alpha)
         rms_hist.append(rms)
@@ -697,6 +697,7 @@ def invert(obs_data, thicknesses, log_resistivities, tx_radius, times,
            plot_alpha=False, analytical_j=True,
            system_filter=None,
            waveform_times=None, waveform_currents=None, n_step=200,
+           waveform_n_quad=5,
            geometry='circle_central', n_quad=5,
            rx_offset=0.0, rx_y=0.0, circle_warmstart=False):
     """Regularised Gauss-Newton inversion for 1-D layered-earth TEM.
@@ -757,7 +758,8 @@ def invert(obs_data, thicknesses, log_resistivities, tx_radius, times,
     system_filter       : callable or None  H(omega) -> complex
     waveform_times      : array-like or None  waveform break points [s]
     waveform_currents   : array-like or None  current at break points [A]
-    n_step              : int    dense time-grid size for waveform convolution
+    n_step              : int    unused (kept for backwards compatibility)
+    waveform_n_quad     : int    GL quadrature order for waveform convolution (default 5)
 
     Returns
     -------
@@ -801,12 +803,12 @@ def invert(obs_data, thicknesses, log_resistivities, tx_radius, times,
             rx_offset=rx_offset, rx_y=rx_y, circle_warmstart=False,
         )
         print(f'[circle_warmstart] Circle converged (RMS={ws["rms_history"][-1]:.3f}). '
-              f'Running 1 square refinement step...')
+              f'Running up to {maxit} square refinement steps...')
         return invert(
             obs_data=obs_data, thicknesses=thicknesses,
             log_resistivities=ws['log_resistivities'], tx_radius=tx_radius,
             times=times,
-            alpha_start=None, alpha_steps=alpha_steps, maxit=1, eps=eps,
+            alpha_start=None, alpha_steps=alpha_steps, maxit=maxit, eps=eps,
             noise_std=noise_std, use_numba=use_numba, use_cuda=use_cuda,
             calc_sens=calc_sens, store_J=store_J,
             transform=transform, hankel_filter=hankel_filter,
@@ -836,13 +838,11 @@ def invert(obs_data, thicknesses, log_resistivities, tx_radius, times,
     # ---- Waveform convolution setup ----
     _use_waveform = (waveform_times is not None and waveform_currents is not None)
     if _use_waveform:
-        from .waveform import convolve_waveform as _convolve
+        from .waveform import setup_waveform as _setup_waveform
         _wf_t  = np.asarray(waveform_times,    dtype=float)
         _wf_I  = np.asarray(waveform_currents, dtype=float)
-        _step_t = np.logspace(
-            np.log10(times.min() * 1e-2),
-            np.log10(times.max() * 10.0),
-            n_step,
+        _wf_comp_times, _wf_apply = _setup_waveform(
+            times, _wf_t, _wf_I, n_quad=waveform_n_quad
         )
 
 
@@ -875,8 +875,8 @@ def invert(obs_data, thicknesses, log_resistivities, tx_radius, times,
     def _forward_response(log_rho):
         res = np.exp(log_rho)
         if _use_waveform:
-            step_resp = _call_fwd(thicknesses, res, _step_t)
-            return _convolve(_step_t, step_resp, _wf_t, _wf_I, times)
+            step_resp = _call_fwd(thicknesses, res, _wf_comp_times)
+            return _wf_apply(step_resp)
         return _call_fwd(thicknesses, res, times)
 
     # ---- Jacobian closure ----
@@ -909,23 +909,25 @@ def invert(obs_data, thicknesses, log_resistivities, tx_radius, times,
         if analytical_j and _use_waveform:
             # Analytical Jacobian with waveform convolution.
             #
-            # The convolution G_i = conv(F, w)_i is linear in F, so:
+            # G_i = conv(F, w)_i is linear in F, so:
             #   dG_i/d(ln rho_j) = conv(dF/d(ln rho_j), w)_i
             #
-            # getJ_analytical returns J_anal[k,j] = d ln(F(t_k)) / d ln(rho_j)
-            # so the absolute gradient is: dF(t_k)/d(ln rho_j) = J_anal[k,j] * F(t_k)
+            # getJ_ana returns J_anal[k,j] = d ln(F(t_k)) / d ln(rho_j)
+            # Absolute gradient: dF(t_k)/d(ln rho_j) = J_anal[k,j] * F(t_k)
+            # Log-space Jacobian: J_conv[i,j] = dG_i/d(ln rho_j) / G_i
             #
-            # Then the log-space Jacobian of the convolved response:
-            #   J_conv[i,j] = dG_i/d(ln rho_j) / G_i
+            # Both the step response and the analytical Jacobian are evaluated
+            # only at _wf_comp_times (the precomputed deduplicated quadrature
+            # times), not on a dense grid.  This is the empymod pattern.
             res       = np.exp(log_rho)
-            step_resp = _call_fwd(thicknesses, res, _step_t)
+            step_resp = _call_fwd(thicknesses, res, _wf_comp_times)  # (n_unique,)
             _tx_geom_j = (float(tx_radius) / np.sqrt(np.pi)
                           if geometry.startswith('square') else float(tx_radius))
             J_anal = getJ_ana(
                 thicknesses=thicknesses,
                 log_resistivities=log_rho,
                 tx_geom=_tx_geom_j,
-                times=_step_t,
+                times=_wf_comp_times,
                 geometry=geometry,
                 rx_offset=float(rx_offset),
                 rx_y=float(rx_y),
@@ -937,14 +939,14 @@ def invert(obs_data, thicknesses, log_resistivities, tx_radius, times,
                 hankel_filter=hankel_filter,
                 fourier_filter=fourier_filter,
                 euler_order=euler_order,
-            )  # (n_step, N)
-            G = _convolve(_step_t, step_resp, _wf_t, _wf_I, times)  # (n_t,)
+            )  # (n_unique, N)
+            G = _wf_apply(step_resp)                      # (n_gates,)
+            # dF matrix: (n_unique, N) — absolute gradients at comp times
+            dF = J_anal * step_resp[:, None]              # broadcast
+            dG = _wf_apply(dF)                            # (n_gates, N)
             J_conv = np.zeros((len(times), log_rho.size))
             valid_g = G > 0
-            for j in range(log_rho.size):
-                dF_j = J_anal[:, j] * step_resp          # absolute gradient on dense grid
-                dG_j = _convolve(_step_t, dF_j, _wf_t, _wf_I, times)
-                J_conv[valid_g, j] = dG_j[valid_g] / G[valid_g]
+            J_conv[valid_g, :] = dG[valid_g, :] / G[valid_g, None]
             return J_conv
 
         # Finite-difference Jacobian: waveform convolution is included
@@ -999,7 +1001,7 @@ def invert(obs_data, thicknesses, log_resistivities, tx_radius, times,
         rms_history.append(rms)
 
         elapsed = _time_mod.time() - t_loop
-        print(f"Iteration {it + 1:>3d}:  RMS = {rms:.4f}  ({elapsed:.1f} s)")
+        print(f"Iteration {it + 1:>3d}:  RMS = {rms:.4f}")
 
         if rms <= 1.0:
             print("  RMS <= 1 — converged.")
