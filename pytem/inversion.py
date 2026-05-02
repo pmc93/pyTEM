@@ -21,6 +21,7 @@ from .transform_weights import MU0, HANKEL_FILTERS, FOURIER_FILTERS, EULER_PARAM
 from .backends import HAS_CUDA
 from .kernels_numba import HAS_NUMBA
 from .forward import (fwd_circle_central, fwd_square_central,
+                      fwd_circle_offset, fwd_square_offset,
                       _precompute_filter_dlf, _precompute_filter_euler)
 
 if HAS_NUMBA:
@@ -432,9 +433,8 @@ def getRMS(obs_data, mod_data, obs_noise):
     return rms
 
 
-def getAlpha(alpha_start, step):
+def getAlpha(alpha_start, step, alpha_step=1/9):
     """Log-spaced regularisation parameter for a given cooling step."""
-    alpha_step = 1 / 9
     log_alpha = np.log10(alpha_start) - alpha_step * step
     alpha = 10 ** log_alpha
     return alpha
@@ -562,7 +562,8 @@ def _backtrack(m, delta, ln_rho_min, ln_rho_max):
 
 def _alpha_search(alpha_start, alpha_steps, Jw, dw, R, m,
                   thicknesses, fwd_fn, obs_data, w,
-                  ln_rho_min, ln_rho_max, plot=False):
+                  ln_rho_min, ln_rho_max, alpha_step=1/9, rms_current=np.inf,
+                  plot=False):
     """Log-spaced alpha search with parabola backtrack to RMS = 1.
 
     Tests ``alpha_steps`` regularisation strengths starting from
@@ -583,6 +584,11 @@ def _alpha_search(alpha_start, alpha_steps, Jw, dw, R, m,
     w            : (n_t,)     noise weights (1 / noise_log)
     ln_rho_min   : float
     ln_rho_max   : float
+    alpha_step   : float      log10 step size between consecutive alpha values
+                              (default 1/9, i.e. ~10 steps per decade)
+    rms_current  : float      RMS of the current model before any update;
+                              the 'RMS increased' early stop only fires once
+                              at least one alpha has improved on this value
     plot         : bool       show alpha-RMS diagnostic figure (default False)
 
     Returns
@@ -590,11 +596,12 @@ def _alpha_search(alpha_start, alpha_steps, Jw, dw, R, m,
     alpha_hist : list of float    tested + parabola alpha values
     rms_hist   : list of float    corresponding RMS values
     delta_hist : list of ndarray  corresponding model deltas (m_trial - m)
+    mod_hist   : list of ndarray  corresponding forward responses for each trial
     """
-    alpha_hist, rms_hist, delta_hist = [], [], []
+    alpha_hist, rms_hist, delta_hist, mod_hist = [], [], [], []
 
     for i in range(alpha_steps):
-        alpha = getAlpha(alpha_start, step=i)
+        alpha = getAlpha(alpha_start, step=i, alpha_step=alpha_step)
         avs   = getAlphas(alpha, thicknesses)
         delta = _gn_solve(Jw, dw, R, avs, m)
         trial, step = _backtrack(m, delta, ln_rho_min, ln_rho_max)
@@ -607,12 +614,17 @@ def _alpha_search(alpha_start, alpha_steps, Jw, dw, R, m,
         alpha_hist.append(alpha)
         rms_hist.append(rms)
         delta_hist.append(trial - m)
+        mod_hist.append(mod)
 
-        if len(rms_hist) > 1 and rms > rms_hist[-2]:
+        if rms < 1.0:
+            print("    RMS below 1 — stopping for parabola fit.")
+            break
+
+        if len(rms_hist) > 1 and rms > rms_hist[-2] and min(rms_hist[:-1]) < rms_current:
             print("    RMS increased — stopping alpha search early.")
             break
 
-    # Polynomial backtrack to find alpha* where RMS = 1
+    # Polynomial backtrack to find alpha* where RMS = 1 (only when below 1 is reached)
     x_data = np.log10(np.array(alpha_hist))
     y_data = np.array(rms_hist)
     deg    = min(2, len(x_data) - 1)
@@ -644,6 +656,7 @@ def _alpha_search(alpha_start, alpha_steps, Jw, dw, R, m,
             alpha_hist.append(parabola_alpha)
             rms_hist.append(rms_par)
             delta_hist.append(trial_par - m)
+            mod_hist.append(mod_par)
 
     if plot and coeffs is not None:
         import matplotlib.pyplot as _plt
@@ -668,7 +681,7 @@ def _alpha_search(alpha_start, alpha_steps, Jw, dw, R, m,
         fig.tight_layout()
         _plt.show()
 
-    return alpha_hist, rms_hist, delta_hist
+    return alpha_hist, rms_hist, delta_hist, mod_hist
 
 
 # ============================================================
@@ -676,14 +689,16 @@ def _alpha_search(alpha_start, alpha_steps, Jw, dw, R, m,
 # ============================================================
 
 def invert(obs_data, thicknesses, log_resistivities, tx_radius, times,
-           alpha_start=None, alpha_steps=5, maxit=20, eps=1e-4,
+           alpha_start=None, alpha_steps=5, alpha_step=1/9, maxit=20, eps=1e-4,
            noise_std=0.02, use_numba=True, use_cuda=True,
            calc_sens=False, store_J=False,
            transform='euler', hankel_filter='key_101', fourier_filter='key_81',
            euler_order=11, rho_min=1e-1, rho_max=1e5, max_noise_frac=0.10,
            plot_alpha=False, analytical_j=True,
            system_filter=None,
-           waveform_times=None, waveform_currents=None, n_step=200):
+           waveform_times=None, waveform_currents=None, n_step=200,
+           geometry='circle_central', n_quad=5,
+           rx_offset=0.0, rx_y=0.0, circle_warmstart=False):
     """Regularised Gauss-Newton inversion for 1-D layered-earth TEM.
 
     Minimises  phi(m) = ||W (ln d_obs - ln d_pred(m))||^2 + alpha * m^T R m
@@ -720,6 +735,9 @@ def invert(obs_data, thicknesses, log_resistivities, tx_radius, times,
     alpha_start         : float or None  starting regularisation strength
                           (auto-estimated from JTd if None)
     alpha_steps         : int    number of alpha values per outer iteration
+    alpha_step          : float  log10 step size between consecutive alpha values
+                          (default 1/9 ≈ 10 steps per decade; increase for
+                          larger jumps, e.g. 1/4 ≈ 4 steps per decade)
     maxit               : int    maximum Gauss-Newton iterations
     eps                 : float  finite-difference step for FD Jacobian
     noise_std           : float or (n_t,)  fractional noise standard deviation
@@ -761,6 +779,46 @@ def invert(obs_data, thicknesses, log_resistivities, tx_radius, times,
     m           = np.asarray(log_resistivities, dtype=float).copy()
     times       = np.asarray(times,             dtype=float)
 
+    # ---- Circle warm-start ----
+    if circle_warmstart and geometry.startswith('square'):
+        r_circ    = float(tx_radius) / np.sqrt(np.pi)
+        circ_geom = 'circle_central' if geometry == 'square_central' else 'circle_offset'
+        print(f'[circle_warmstart] Running circle pre-inversion '
+              f'(geometry={circ_geom}, r={r_circ:.3f} m)...')
+        ws = invert(
+            obs_data=obs_data, thicknesses=thicknesses,
+            log_resistivities=m, tx_radius=r_circ, times=times,
+            alpha_start=alpha_start, alpha_steps=alpha_steps, maxit=maxit,
+            eps=eps, noise_std=noise_std, use_numba=use_numba, use_cuda=use_cuda,
+            calc_sens=False, store_J=False,
+            transform=transform, hankel_filter=hankel_filter,
+            fourier_filter=fourier_filter, euler_order=euler_order,
+            rho_min=rho_min, rho_max=rho_max, max_noise_frac=max_noise_frac,
+            plot_alpha=plot_alpha, analytical_j=analytical_j,
+            system_filter=system_filter,
+            waveform_times=waveform_times, waveform_currents=waveform_currents,
+            n_step=n_step, geometry=circ_geom, n_quad=1,
+            rx_offset=rx_offset, rx_y=rx_y, circle_warmstart=False,
+        )
+        print(f'[circle_warmstart] Circle converged (RMS={ws["rms_history"][-1]:.3f}). '
+              f'Running 1 square refinement step...')
+        return invert(
+            obs_data=obs_data, thicknesses=thicknesses,
+            log_resistivities=ws['log_resistivities'], tx_radius=tx_radius,
+            times=times,
+            alpha_start=None, alpha_steps=alpha_steps, maxit=1, eps=eps,
+            noise_std=noise_std, use_numba=use_numba, use_cuda=use_cuda,
+            calc_sens=calc_sens, store_J=store_J,
+            transform=transform, hankel_filter=hankel_filter,
+            fourier_filter=fourier_filter, euler_order=euler_order,
+            rho_min=rho_min, rho_max=rho_max, max_noise_frac=max_noise_frac,
+            plot_alpha=plot_alpha, analytical_j=analytical_j,
+            system_filter=system_filter,
+            waveform_times=waveform_times, waveform_currents=waveform_currents,
+            n_step=n_step, geometry=geometry, n_quad=n_quad,
+            rx_offset=rx_offset, rx_y=rx_y, circle_warmstart=False,
+        )
+
     ln_rho_min = np.log(float(rho_min))
     ln_rho_max = np.log(float(rho_max))
 
@@ -789,7 +847,6 @@ def invert(obs_data, thicknesses, log_resistivities, tx_radius, times,
 
 
     _fwd_kw = dict(
-        tx_radius=float(tx_radius),
         use_numba=use_numba,
         use_cuda=use_cuda,
         system_filter=system_filter,
@@ -799,27 +856,47 @@ def invert(obs_data, thicknesses, log_resistivities, tx_radius, times,
         euler_order=euler_order,
     )
 
+    # ---- Geometry dispatch helper ----
+    def _call_fwd(thick, res, t):
+        if geometry == 'circle_central':
+            return -fwd_circle_central(thick, res, float(tx_radius), t, **_fwd_kw)
+        elif geometry == 'circle_offset':
+            return -fwd_circle_offset(thick, res, float(tx_radius),
+                                      float(rx_offset), t, **_fwd_kw)
+        elif geometry == 'square_central':
+            return -fwd_square_central(thick, res, float(tx_radius), t,
+                                       n_quad=n_quad, **_fwd_kw)
+        else:  # square_offset
+            return -fwd_square_offset(thick, res, float(tx_radius),
+                                      float(rx_offset), float(rx_y), t,
+                                      n_quad=n_quad, **_fwd_kw)
+
     # ---- Forward model closure ----
     def _forward_response(log_rho):
         res = np.exp(log_rho)
         if _use_waveform:
-            step_resp = -fwd_circle_central(
-                thicknesses=thicknesses, resistivities=res,
-                times=_step_t, **_fwd_kw)
+            step_resp = _call_fwd(thicknesses, res, _step_t)
             return _convolve(_step_t, step_resp, _wf_t, _wf_I, times)
-        return -fwd_circle_central(
-            thicknesses=thicknesses, resistivities=res,
-            times=times, **_fwd_kw)
+        return _call_fwd(thicknesses, res, times)
 
     # ---- Jacobian closure ----
     def _build_jacobian(log_rho):
         if analytical_j and not _use_waveform:
             # Pure analytical Jacobian — no waveform.
+            # getJ_ana always expects tx_geom as a circle radius; for square
+            # geometries it converts to side_length internally via side = a*sqrt(pi).
+            # tx_radius is side_length for square, so convert back to circle radius.
+            _tx_geom_j = (float(tx_radius) / np.sqrt(np.pi)
+                          if geometry.startswith('square') else float(tx_radius))
             return getJ_ana(
                 thicknesses=thicknesses,
                 log_resistivities=log_rho,
-                tx_geom=float(tx_radius),
+                tx_geom=_tx_geom_j,
                 times=times,
+                geometry=geometry,
+                rx_offset=float(rx_offset),
+                rx_y=float(rx_y),
+                n_quad=n_quad,
                 use_numba=use_numba,
                 use_cuda=False,
                 system_filter=system_filter,
@@ -841,14 +918,18 @@ def invert(obs_data, thicknesses, log_resistivities, tx_radius, times,
             # Then the log-space Jacobian of the convolved response:
             #   J_conv[i,j] = dG_i/d(ln rho_j) / G_i
             res       = np.exp(log_rho)
-            step_resp = -fwd_circle_central(
-                thicknesses=thicknesses, resistivities=res,
-                times=_step_t, **_fwd_kw)
+            step_resp = _call_fwd(thicknesses, res, _step_t)
+            _tx_geom_j = (float(tx_radius) / np.sqrt(np.pi)
+                          if geometry.startswith('square') else float(tx_radius))
             J_anal = getJ_ana(
                 thicknesses=thicknesses,
                 log_resistivities=log_rho,
-                tx_geom=float(tx_radius),
+                tx_geom=_tx_geom_j,
                 times=_step_t,
+                geometry=geometry,
+                rx_offset=float(rx_offset),
+                rx_y=float(rx_y),
+                n_quad=n_quad,
                 use_numba=use_numba,
                 use_cuda=False,
                 system_filter=system_filter,
@@ -893,8 +974,7 @@ def invert(obs_data, thicknesses, log_resistivities, tx_radius, times,
     dw0     = res0 * w
 
     if alpha_start is None:
-        alpha_start = 10.0 ** np.ceil(
-            np.log10(np.linalg.norm(Jw0.T @ dw0, np.inf) + 1e-30))
+        alpha_start = float(np.linalg.norm(Jw0.T @ dw0, np.inf) + 1e-30)
     print(f"alpha_start = {alpha_start:.3g}")
 
     # ---- Gauss-Newton loop ----
@@ -904,9 +984,9 @@ def invert(obs_data, thicknesses, log_resistivities, tx_radius, times,
     J_cur         = J0
 
     t_loop = _time_mod.time()
+    d_pred = d0  # reuse the forward response already computed above
 
     for it in range(maxit):
-        d_pred = _forward_response(m)
         valid  = (obs_data > 0) & (d_pred > 0)
 
         if not np.any(valid):
@@ -934,11 +1014,13 @@ def invert(obs_data, thicknesses, log_resistivities, tx_radius, times,
         Jw = J_cur * w[:, None]
         dw = res_log * w
 
-        alpha_h, rms_h, delta_h = _alpha_search(
+        alpha_h, rms_h, delta_h, mod_h = _alpha_search(
             alpha_start, alpha_steps,
             Jw, dw, R, m,
             thicknesses, _forward_response, obs_data, w,
             ln_rho_min, ln_rho_max,
+            alpha_step=alpha_step,
+            rms_current=rms,
             plot=plot_alpha,
         )
 
@@ -950,7 +1032,19 @@ def invert(obs_data, thicknesses, log_resistivities, tx_radius, times,
         else:
             best_idx = int(np.argmin(rms_arr))
 
+        # Stop if no alpha value improved the fit.
+        if rms_h[best_idx] >= rms:
+            print("  No improvement found — stopping.")
+            break
+
+        # Cool alpha_start to one step above the best alpha found so far.
+        # Starting exactly at the best means the next search only explores
+        # weaker regularisation; shifting up by one step ensures the optimum
+        # remains within the search window even if it drifts upward.
+        alpha_start = alpha_h[best_idx] * (10.0 ** alpha_step)
+
         m = np.clip(m + delta_h[best_idx], ln_rho_min, ln_rho_max)
+        d_pred = mod_h[best_idx]  # reuse; avoids one forward call at the top of the next iteration
         model_history.append(m.copy())
 
     # ---- Optional sensitivity ----
