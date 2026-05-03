@@ -1030,13 +1030,25 @@ def invert(obs_data, thicknesses, log_resistivities, tx_radius, times,
             plot=plot_alpha,
         )
 
-        # Select model update closest to RMS = 1 from below; fall back to min.
-        rms_arr = np.array(rms_h)
-        below   = rms_arr[rms_arr <= 1.0]
-        if below.size > 0:
-            best_idx = int(np.where(rms_arr == below.max())[0][-1])
+        # Select best model update.
+        # When any search RMS dipped below 1 (overshoot), _alpha_search appended
+        # the parabola-adjusted model as the last entry.  Always prefer that entry
+        # so the update lands as close to RMS = 1 as possible — even if the
+        # parabola RMS ended up slightly above 1 (which the "below" filter would
+        # otherwise reject).
+        rms_arr   = np.array(rms_h)
+        overshoot = bool(np.any(rms_arr < 1.0))
+        if overshoot:
+            best_idx          = len(rms_h) - 1
+            raw_overshoot_rms = float(rms_arr[rms_arr < 1.0].min())
+            print(f"  Overshoot (RMS = {raw_overshoot_rms:.3f}) — "
+                  f"parabola model: RMS = {rms_h[best_idx]:.3f}")
         else:
-            best_idx = int(np.argmin(rms_arr))
+            below = rms_arr[rms_arr <= 1.0]
+            if below.size > 0:
+                best_idx = int(np.where(rms_arr == below.max())[0][-1])
+            else:
+                best_idx = int(np.argmin(rms_arr))
 
         # Stop if no alpha value improved the fit.
         if rms_h[best_idx] >= rms:
@@ -1050,8 +1062,14 @@ def invert(obs_data, thicknesses, log_resistivities, tx_radius, times,
         alpha_start = alpha_h[best_idx] * (10.0 ** alpha_step)
 
         m = np.clip(m + delta_h[best_idx], ln_rho_min, ln_rho_max)
-        d_pred = mod_h[best_idx]  # reuse; avoids one forward call at the top of the next iteration
+        d_pred = mod_h[best_idx]
         model_history.append(m.copy())
+
+        # The parabola step is terminal — stop immediately after applying it.
+        if overshoot:
+            rms_history.append(rms_h[best_idx])
+            print(f"  Parabola applied — stopping.")
+            break
 
     # ---- Optional sensitivity ----
     sensitivity = None
