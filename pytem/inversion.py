@@ -609,7 +609,7 @@ def _alpha_search(alpha_start, alpha_steps, Jw, dw, R, m,
         valid = (obs_data > 0) & (mod > 0)
         d_res = np.log(obs_data[valid]) - np.log(mod[valid])
         rms   = np.sqrt(np.mean((w[valid] * d_res) ** 2))
-        print(f"    alpha = {alpha:.3f},  RMS = {rms:.4f}"
+        print(f"    alpha = {alpha:.2f},  RMS = {rms:.2f}"
               + (f"  (step = {step:.2f})" if step < 1.0 else ""))
         alpha_hist.append(alpha)
         rms_hist.append(rms)
@@ -650,8 +650,8 @@ def _alpha_search(alpha_start, alpha_steps, Jw, dw, R, m,
             valid_par      = (obs_data > 0) & (mod_par > 0)
             d_par          = np.log(obs_data[valid_par]) - np.log(mod_par[valid_par])
             rms_par        = np.sqrt(np.mean((w[valid_par] * d_par) ** 2))
-            print(f"    Parabola: alpha* = {parabola_alpha:.3g},  "
-                  f"predicted RMS = 1.00,  actual RMS = {rms_par:.4f}"
+            print(f"    Parabola: alpha* = {parabola_alpha:.3f},  "
+                  f"predicted RMS = 1,  actual RMS = {rms_par:.3f}"
                   + (f"  (step = {step_par:.2f})" if step_par < 1.0 else ""))
             alpha_hist.append(parabola_alpha)
             rms_hist.append(rms_par)
@@ -790,7 +790,8 @@ def invert(obs_data, thicknesses, log_resistivities, tx_radius, times,
         ws = invert(
             obs_data=obs_data, thicknesses=thicknesses,
             log_resistivities=m, tx_radius=r_circ, times=times,
-            alpha_start=alpha_start, alpha_steps=alpha_steps, maxit=maxit,
+            alpha_start=alpha_start, alpha_steps=alpha_steps, alpha_step=alpha_step,
+            maxit=maxit,
             eps=eps, noise_std=noise_std, use_numba=use_numba, use_cuda=use_cuda,
             calc_sens=False, store_J=False,
             transform=transform, hankel_filter=hankel_filter,
@@ -799,6 +800,7 @@ def invert(obs_data, thicknesses, log_resistivities, tx_radius, times,
             plot_alpha=plot_alpha, analytical_j=analytical_j,
             system_filter=system_filter,
             waveform_times=waveform_times, waveform_currents=waveform_currents,
+            waveform_n_quad=waveform_n_quad,
             n_step=n_step, geometry=circ_geom, n_quad=1,
             rx_offset=rx_offset, rx_y=rx_y, circle_warmstart=False,
         )
@@ -808,7 +810,8 @@ def invert(obs_data, thicknesses, log_resistivities, tx_radius, times,
             obs_data=obs_data, thicknesses=thicknesses,
             log_resistivities=ws['log_resistivities'], tx_radius=tx_radius,
             times=times,
-            alpha_start=None, alpha_steps=alpha_steps, maxit=maxit, eps=eps,
+            alpha_start=None, alpha_steps=alpha_steps, alpha_step=alpha_step,
+            maxit=maxit, eps=eps,
             noise_std=noise_std, use_numba=use_numba, use_cuda=use_cuda,
             calc_sens=calc_sens, store_J=store_J,
             transform=transform, hankel_filter=hankel_filter,
@@ -817,6 +820,7 @@ def invert(obs_data, thicknesses, log_resistivities, tx_radius, times,
             plot_alpha=plot_alpha, analytical_j=analytical_j,
             system_filter=system_filter,
             waveform_times=waveform_times, waveform_currents=waveform_currents,
+            waveform_n_quad=waveform_n_quad,
             n_step=n_step, geometry=geometry, n_quad=n_quad,
             rx_offset=rx_offset, rx_y=rx_y, circle_warmstart=False,
         )
@@ -1001,7 +1005,7 @@ def invert(obs_data, thicknesses, log_resistivities, tx_radius, times,
         rms_history.append(rms)
 
         elapsed = _time_mod.time() - t_loop
-        print(f"Iteration {it + 1:>3d}:  RMS = {rms:.4f}")
+        print(f"Iteration {it + 1:>3d}:  RMS = {rms:.2f}")
 
         if rms <= 1.0:
             print("  RMS <= 1 — converged.")
