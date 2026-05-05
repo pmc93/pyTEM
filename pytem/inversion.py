@@ -974,7 +974,7 @@ def invert(obs_data, thicknesses, log_resistivities, tx_radius, times,
               f"(over {valid_rho.size}/{len(times)} valid gates)")
 
     # ---- Initial alpha heuristic ----
-    print("Building initial Jacobian...")
+    #print("Building initial Jacobian...")
     t0 = _time_mod.time()
     J0 = _build_jacobian(m)
     d0 = _forward_response(m)
@@ -988,7 +988,7 @@ def invert(obs_data, thicknesses, log_resistivities, tx_radius, times,
 
     if alpha_start is None:
         alpha_start = float(np.linalg.norm(Jw0.T @ dw0, np.inf) + 1e-30)
-    print(f"Alpha start = {alpha_start:.3g}")
+    print(f"Alpha start = {alpha_start:.3f}")
 
     # ---- Gauss-Newton loop ----
     rms_history   = []
