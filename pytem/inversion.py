@@ -609,7 +609,7 @@ def _alpha_search(alpha_start, alpha_steps, Jw, dw, R, m,
         valid = (obs_data > 0) & (mod > 0)
         d_res = np.log(obs_data[valid]) - np.log(mod[valid])
         rms   = np.sqrt(np.mean((w[valid] * d_res) ** 2))
-        print(f"    alpha = {alpha:.2f},  RMS = {rms:.2f}"
+        print(f"    Alpha = {alpha:.2f},  RMS = {rms:.2f}"
               + (f"  (step = {step:.2f})" if step < 1.0 else ""))
         alpha_hist.append(alpha)
         rms_hist.append(rms)
@@ -617,11 +617,11 @@ def _alpha_search(alpha_start, alpha_steps, Jw, dw, R, m,
         mod_hist.append(mod)
 
         if rms < 1.0:
-            print("    RMS below 1 — stopping for parabola fit.")
+            print("    RMS below 1 - stopping for parabola fit.")
             break
 
         if len(rms_hist) > 1 and rms > rms_hist[-2] and min(rms_hist[:-1]) < rms_current:
-            print("    RMS increased — stopping alpha search early.")
+            print("    RMS increased - stopping alpha search early.")
             break
 
     # Polynomial backtrack to find alpha* where RMS = 1 (only when below 1 is reached)
@@ -650,8 +650,8 @@ def _alpha_search(alpha_start, alpha_steps, Jw, dw, R, m,
             valid_par      = (obs_data > 0) & (mod_par > 0)
             d_par          = np.log(obs_data[valid_par]) - np.log(mod_par[valid_par])
             rms_par        = np.sqrt(np.mean((w[valid_par] * d_par) ** 2))
-            print(f"    Parabola: alpha* = {parabola_alpha:.3f},  "
-                  f"predicted RMS = 1,  actual RMS = {rms_par:.3f}"
+            print(f"    Fitted Alpha = {parabola_alpha:.3f}"
+                  f", Actual RMS = {rms_par:.3f}"
                   + (f"  (step = {step_par:.2f})" if step_par < 1.0 else ""))
             alpha_hist.append(parabola_alpha)
             rms_hist.append(rms_par)
@@ -675,7 +675,6 @@ def _alpha_search(alpha_start, alpha_steps, Jw, dw, R, m,
                     markersize=12, zorder=6)
         ax.set_xlabel('$\\log_{{10}}(\\alpha)$')
         ax.set_ylabel('RMS')
-        ax.set_title('Alpha search: parabola backtrack')
         ax.legend(fontsize=8)
         ax.grid(True, alpha=0.3)
         fig.tight_layout()
@@ -886,7 +885,7 @@ def invert(obs_data, thicknesses, log_resistivities, tx_radius, times,
     # ---- Jacobian closure ----
     def _build_jacobian(log_rho):
         if analytical_j and not _use_waveform:
-            # Pure analytical Jacobian — no waveform.
+            # Pure analytical Jacobian - no waveform.
             # getJ_ana always expects tx_geom as a circle radius; for square
             # geometries it converts to side_length internally via side = a*sqrt(pi).
             # tx_radius is side_length for square, so convert back to circle radius.
@@ -945,7 +944,7 @@ def invert(obs_data, thicknesses, log_resistivities, tx_radius, times,
                 euler_order=euler_order,
             )  # (n_unique, N)
             G = _wf_apply(step_resp)                      # (n_gates,)
-            # dF matrix: (n_unique, N) — absolute gradients at comp times
+            # dF matrix: (n_unique, N) - absolute gradients at comp times
             dF = J_anal * step_resp[:, None]              # broadcast
             dG = _wf_apply(dF)                            # (n_gates, N)
             J_conv = np.zeros((len(times), log_rho.size))
@@ -966,12 +965,20 @@ def invert(obs_data, thicknesses, log_resistivities, tx_radius, times,
             J[valid, i] = (np.log(fi[valid]) - np.log(f0[valid])) / h
         return J
 
+    # ---- Print average apparent resistivity of observed data ----
+    tx_area = np.pi * float(tx_radius) ** 2
+    app_rho_obs = dbdt_to_apprho(obs_data, tx_area, times)
+    valid_rho = app_rho_obs[(obs_data > 0) & np.isfinite(app_rho_obs)]
+    if valid_rho.size > 0:
+        print(f"Observed data: Mean Apparent Resistivity = {np.mean(valid_rho):.1f} Ohm.m "
+              f"(over {valid_rho.size}/{len(times)} valid gates)")
+
     # ---- Initial alpha heuristic ----
     print("Building initial Jacobian...")
     t0 = _time_mod.time()
     J0 = _build_jacobian(m)
     d0 = _forward_response(m)
-    print(f"  done ({_time_mod.time() - t0:.1f} s)")
+    #print(f"  done ({_time_mod.time() - t0:.1f} s)")
 
     valid0  = (obs_data > 0) & (d0 > 0)
     res0    = np.zeros(len(obs_data))
@@ -981,7 +988,7 @@ def invert(obs_data, thicknesses, log_resistivities, tx_radius, times,
 
     if alpha_start is None:
         alpha_start = float(np.linalg.norm(Jw0.T @ dw0, np.inf) + 1e-30)
-    print(f"alpha_start = {alpha_start:.3g}")
+    print(f"Alpha start = {alpha_start:.3g}")
 
     # ---- Gauss-Newton loop ----
     rms_history   = []
@@ -996,7 +1003,7 @@ def invert(obs_data, thicknesses, log_resistivities, tx_radius, times,
         valid  = (obs_data > 0) & (d_pred > 0)
 
         if not np.any(valid):
-            print("WARNING: No valid data — stopping.")
+            print("WARNING: No valid data - stopping.")
             break
 
         res_log         = np.zeros(len(obs_data))
@@ -1008,7 +1015,7 @@ def invert(obs_data, thicknesses, log_resistivities, tx_radius, times,
         print(f"Iteration {it + 1:>3d}:  RMS = {rms:.2f}")
 
         if rms <= 1.0:
-            print("  RMS <= 1 — converged.")
+            print("  RMS <= 1 - converged.")
             break
 
         if it > 0:
@@ -1041,8 +1048,7 @@ def invert(obs_data, thicknesses, log_resistivities, tx_radius, times,
         if overshoot:
             best_idx          = len(rms_h) - 1
             raw_overshoot_rms = float(rms_arr[rms_arr < 1.0].min())
-            print(f"  Overshoot (RMS = {raw_overshoot_rms:.3f}) — "
-                  f"parabola model: RMS = {rms_h[best_idx]:.3f}")
+            #print(f"  Overshoot (RMS = {raw_overshoot_rms:.3f})")
         else:
             below = rms_arr[rms_arr <= 1.0]
             if below.size > 0:
@@ -1052,7 +1058,7 @@ def invert(obs_data, thicknesses, log_resistivities, tx_radius, times,
 
         # Stop if no alpha value improved the fit.
         if rms_h[best_idx] >= rms:
-            print("  No improvement found — stopping.")
+            print("  No improvement found - stopping.")
             break
 
         # Cool alpha_start to one step above the best alpha found so far.
@@ -1065,10 +1071,10 @@ def invert(obs_data, thicknesses, log_resistivities, tx_radius, times,
         d_pred = mod_h[best_idx]
         model_history.append(m.copy())
 
-        # The parabola step is terminal — stop immediately after applying it.
+        # The parabola step is terminal - stop immediately after applying it.
         if overshoot:
             rms_history.append(rms_h[best_idx])
-            print(f"  Parabola applied — stopping.")
+            #print(f"  Parabola applied - stopping.")
             break
 
     # ---- Optional sensitivity ----
