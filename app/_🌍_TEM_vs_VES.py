@@ -31,35 +31,38 @@ st.markdown(
 col1, col2 = st.columns(2)
 
 with col1:
-    st.subheader(":steelblue[🧲 TEM - Transient Electromagnetic Method]")
-    st.markdown(
-        r"""
-        A large transmitter (Tx) loop carries a steady current that is abruptly
-        switched off. The collapsing magnetic field induces **eddy currents**
-        that diffuse downward through the earth. A receiver (Rx) coil records the
-        decaying secondary field dB/dt.
-
-        - **Source**: inductive, no ground contact needed
-        - **Depth proxy**: time (early = shallow, late = deep)
-        - **Best for**: conductive targets (clay, saline water)
-        - **Data**: dB/dt decay curve (V/m²)
-        """
-    )
+    st.markdown("""
+<div style="background-color:#1a3a5c; border-left:6px solid steelblue;
+            border-radius:6px; padding:1rem 1.2rem;">
+  <h4 style="color:steelblue; margin-top:0;">🧲 TEM — Transient Electromagnetic Method</h4>
+  <p>A transmitter (Tx) loop carries a steady current that is abruptly switched off.
+  The collapsing magnetic field induces <b>eddy currents</b> that diffuse downward through
+  the earth. A receiver (Rx) coil records the decaying secondary field dB/dt.</p>
+  <ul style="margin-bottom:0;">
+    <li><b>Source:</b> inductive, no ground contact needed</li>
+    <li><b>Depth proxy:</b> time (early = shallow, late = deep)</li>
+    <li><b>Best for:</b> conductive targets (clay, saline water)</li>
+    <li><b>Data:</b> dB/dt decay curve (V/m²)</li>
+  </ul>
+</div>
+""", unsafe_allow_html=True)
 
 with col2:
-    st.subheader(":orange[⚡️ VES - Vertical Electrical Sounding Method]")
-    st.markdown(
-        r"""
-        Current is injected via two electrodes (A, B); a second pair (M, N)
-        measures the resulting voltage. Increasing the electrode spacing AB/2
-        drives current deeper, sampling greater depth.
-
-        - **Source**: galvanic, electrodes must contact the ground
-        - **Depth proxy**: AB electrode spacing (small = shallow, large = deep)
-        - **Best for**: resistive layers and general stratigraphy
-        - **Data**: apparent resistivity curve $\rho_a$(AB/2)
-        """
-    )
+    st.markdown("""
+<div style="background-color:#3d2200; border-left:6px solid darkorange;
+            border-radius:6px; padding:1rem 1.2rem;">
+  <h4 style="color:darkorange; margin-top:0;">⚡️ VES — Vertical Electrical Sounding Method</h4>
+  <p>Current is injected via two electrodes (A, B); a second pair (M, N) measures the
+  resulting voltage. Increasing the electrode spacing between A and B drives current deeper
+  and samples greater depths.</p>
+  <ul style="margin-bottom:0;">
+    <li><b>Source:</b> galvanic, electrodes must contact the ground</li>
+    <li><b>Depth proxy:</b> AB electrode spacing (small = shallow, large = deep)</li>
+    <li><b>Best for:</b> resistive layers and general stratigraphy</li>
+    <li><b>Data:</b> apparent resistivity curve ρₐ(AB/2)</li>
+  </ul>
+</div>
+""", unsafe_allow_html=True)
 
 left_co, cent_co, last_co = st.columns((1, 3, 1))
 with cent_co:
@@ -89,7 +92,6 @@ st.markdown(
     | Model output | Resistivity + thickness | Resistivity + thickness |
     """
 )
-
 st.divider()
 
 st.subheader(':blue[Module overview]', divider="blue")
