@@ -106,29 +106,35 @@ with tab_tem:
 
     times = np.logspace(t_min, t_max, n_t)
 
-    with st.spinner("Computing …"):
-        dbdt = _tem_fwd(tuple(t_thick), tuple(t_rho), tx_r, tuple(times.tolist()))
+    st.button("⚡ Compute forward model", key="fwd_tem_btn", type="primary",
+              help="Manually trigger computation (also updates automatically on slider change)")
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+    try:
+        with st.spinner("Computing …"):
+            dbdt = _tem_fwd(tuple(t_thick), tuple(t_rho), tx_r, tuple(times.tolist()))
 
-    ax1.loglog(times * 1e3, dbdt, "o-", color="steelblue", ms=4, lw=1.5)
-    ax1.set_xlabel("Time (ms)")
-    ax1.set_ylabel(r"$|\partial B_z/\partial t|$ (A/m$^2$)")
-    ax1.set_title("TEM decay curve")
-    ax1.grid(True, which="both", ls="--", alpha=0.4)
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
 
-    rs, ds = _stair(t_thick, t_rho)
-    ax2.semilogx(rs, ds, color="steelblue", lw=2)
-    ax2.fill_betweenx(ds, rs, alpha=0.15, color="steelblue")
-    ax2.invert_yaxis()
-    ax2.set_xlabel(r"Resistivity (Ω·m)")
-    ax2.set_ylabel("Depth (m)")
-    ax2.set_title("Earth model")
-    ax2.grid(True, which="both", ls="--", alpha=0.4)
+        ax1.loglog(times * 1e3, dbdt, "o-", color="steelblue", ms=4, lw=1.5)
+        ax1.set_xlabel("Time (ms)")
+        ax1.set_ylabel(r"$|\partial B_z/\partial t|$ (A/m$^2$)")
+        ax1.set_title("TEM decay curve")
+        ax1.grid(True, which="both", ls="--", alpha=0.4)
 
-    plt.tight_layout()
-    st.pyplot(fig)
-    plt.close(fig)
+        rs, ds = _stair(t_thick, t_rho)
+        ax2.semilogx(rs, ds, color="steelblue", lw=2)
+        ax2.fill_betweenx(ds, rs, alpha=0.15, color="steelblue")
+        ax2.invert_yaxis()
+        ax2.set_xlabel(r"Resistivity (Ω·m)")
+        ax2.set_ylabel("Depth (m)")
+        ax2.set_title("Earth model")
+        ax2.grid(True, which="both", ls="--", alpha=0.4)
+
+        plt.tight_layout()
+        st.pyplot(fig)
+        plt.close(fig)
+    except Exception as _e:
+        st.warning(f"⚠️ Could not compute: {_e}. Adjust the sliders and click **⚡ Compute forward model**.")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # VES TAB
@@ -153,33 +159,39 @@ with tab_ves:
 
     ab2 = np.logspace(np.log10(ab2_min), np.log10(ab2_max), n_ab2)
 
-    with st.spinner("Computing …"):
-        rhoap = _ves_fwd(tuple(ab2.tolist()), tuple(v_rho), tuple(v_thick), filt)
+    st.button("📊 Compute forward model", key="fwd_ves_btn", type="primary",
+              help="Manually trigger computation (also updates automatically on slider change)")
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+    try:
+        with st.spinner("Computing …"):
+            rhoap = _ves_fwd(tuple(ab2.tolist()), tuple(v_rho), tuple(v_thick), filt)
 
-    _span_v = np.log10(rhoap.max()) - np.log10(rhoap.min())
-    if _span_v < 2.5:
-        _ctr_v = (np.log10(rhoap.max()) + np.log10(rhoap.min())) / 2
-        _vlo, _vhi = 10 ** (_ctr_v - 1.25), 10 ** (_ctr_v + 1.25)
-    else:
-        _vlo, _vhi = rhoap.min() * 0.8, rhoap.max() * 1.25
-    ax1.loglog(ab2, rhoap, "o-", color="darkorange", ms=4, lw=1.5)
-    ax1.set_ylim(_vlo, _vhi)
-    ax1.set_xlabel(r"$AB/2$ (m)")
-    ax1.set_ylabel("Apparent resistivity (Ohm.m)")
-    ax1.set_title("VES sounding curve")
-    ax1.grid(True, which="both", ls="--", alpha=0.4)
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
 
-    rs, ds = _stair(v_thick, v_rho)
-    ax2.semilogx(rs, ds, color="darkorange", lw=2)
-    ax2.fill_betweenx(ds, rs, alpha=0.15, color="darkorange")
-    ax2.invert_yaxis()
-    ax2.set_xlabel(r"Resistivity (Ω·m)")
-    ax2.set_ylabel("Depth (m)")
-    ax2.set_title("Earth model")
-    ax2.grid(True, which="both", ls="--", alpha=0.4)
+        _span_v = np.log10(rhoap.max()) - np.log10(rhoap.min())
+        if _span_v < 2.5:
+            _ctr_v = (np.log10(rhoap.max()) + np.log10(rhoap.min())) / 2
+            _vlo, _vhi = 10 ** (_ctr_v - 1.25), 10 ** (_ctr_v + 1.25)
+        else:
+            _vlo, _vhi = rhoap.min() * 0.8, rhoap.max() * 1.25
+        ax1.loglog(ab2, rhoap, "o-", color="darkorange", ms=4, lw=1.5)
+        ax1.set_ylim(_vlo, _vhi)
+        ax1.set_xlabel(r"$AB/2$ (m)")
+        ax1.set_ylabel("Apparent resistivity (Ohm.m)")
+        ax1.set_title("VES sounding curve")
+        ax1.grid(True, which="both", ls="--", alpha=0.4)
 
-    plt.tight_layout()
-    st.pyplot(fig)
-    plt.close(fig)
+        rs, ds = _stair(v_thick, v_rho)
+        ax2.semilogx(rs, ds, color="darkorange", lw=2)
+        ax2.fill_betweenx(ds, rs, alpha=0.15, color="darkorange")
+        ax2.invert_yaxis()
+        ax2.set_xlabel(r"Resistivity (Ω·m)")
+        ax2.set_ylabel("Depth (m)")
+        ax2.set_title("Earth model")
+        ax2.grid(True, which="both", ls="--", alpha=0.4)
+
+        plt.tight_layout()
+        st.pyplot(fig)
+        plt.close(fig)
+    except Exception as _e:
+        st.warning(f"⚠️ Could not compute: {_e}. Adjust the sliders and click **📊 Compute forward model**.")
