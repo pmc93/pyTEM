@@ -3,189 +3,181 @@ import sys
 
 import numpy as np
 import matplotlib.pyplot as plt
-import pandas as pd
 import streamlit as st
 
-# ── Path setup ────────────────────────────────────────────────────────────────
+# -- Path setup ----------------------------------------------------------------
 _ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
 from pytem import fwd_circle_central, getJ_ana
+from ves import forward as ves_forward, jacobian as ves_jacobian
 
-# ── Page header ───────────────────────────────────────────────────────────────
-st.title("📊 Jacobian & Sensitivity ▶️")
-st.header(":violet[Understanding which time gates see which layers]")
+# -- Constants -----------------------------------------------------------------
+_N_DATA = 20          # fixed number of data points for both methods
+_RHO    = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000]
+
+
+# -- Shared utilities ----------------------------------------------------------
+def _model_ui(n):
+    hdr = st.columns([2, 3, 4])
+    hdr[0].caption("Layer")
+    hdr[1].caption("Thickness (m)")
+    hdr[2].caption("Resistivity (Ohm*m)")
+    h_out, r_out = [], []
+    defaults_rho = [100, 20, 300, 100, 50, 200]
+    defaults_h   = [10, 30, 20, 15, 40]
+    for i in range(n):
+        c = st.columns([2, 3, 4])
+        c[0].markdown(f"**{'Layer ' + str(i+1) if i < n-1 else 'Half-space'}**")
+        if i < n - 1:
+            h_def = defaults_h[i] if i < len(defaults_h) else 20
+            h_out.append(float(c[1].slider(f"Thickness {i+1} (m)", 1, 500, h_def,
+                                            key=f"jac_h{i}",
+                                            label_visibility="collapsed")))
+        rho_def = defaults_rho[i] if i < len(defaults_rho) else 100
+        rho_def = min(_RHO, key=lambda x: abs(x - rho_def))
+        r_out.append(float(c[2].select_slider(f"Resistivity {i+1} (Ohm*m)", _RHO, value=rho_def,
+                                               key=f"jac_r{i}",
+                                               label_visibility="collapsed")))
+    return h_out, r_out
+
+
+# -- Cached computations -------------------------------------------------------
+@st.cache_data(show_spinner=False)
+def _tem_jac(h_t, log_rho_t, tx_r, times_t):
+    h       = list(h_t)
+    log_rho = np.array(log_rho_t)
+    times   = np.array(times_t)
+    dbdt = fwd_circle_central(h, np.exp(log_rho).tolist(), tx_radius=tx_r, times=times)
+    J    = getJ_ana(h, log_rho, tx_r, times,
+                    geometry="circle_central",
+                    hankel_filter="key_101", fourier_filter="key_101")
+    return -dbdt, J
+
+
+@st.cache_data(show_spinner=False)
+def _ves_jac(ab2_t, rho_t, h_t, filt):
+    ab2   = np.array(ab2_t)
+    rho   = np.array(rho_t)
+    h     = np.array(h_t)
+    rhoap = ves_forward(ab2, rho, h, filt)
+    J     = ves_jacobian(ab2, rho, h, filt)
+    return rhoap, J
+
+
+# -- Page ----------------------------------------------------------------------
+st.title("Jacobian & Sensitivity")
+st.header(":violet[Which data points are sensitive to which layers?]")
 
 st.markdown(
     r"""
-    The **Jacobian** (or sensitivity matrix) $\mathbf{J}$ tells us how much each
-    measured time gate $i$ would change if we perturbed the resistivity of layer $j$
-    by a small amount. Working in log–log space keeps the entries dimensionless:
+    The Jacobian $\mathbf{J}$ measures how each data point responds to a perturbation in each layer:
 
-    $$J_{ij} = \frac{\partial \ln(-\dot{B}_i)}{\partial \ln \rho_j}$$
+    $$J_{ij}^{\text{TEM}} = \frac{\partial \ln|\dot{B}_i|}{\partial \ln\rho_j}, \qquad J_{ij}^{\text{VES}} = \frac{\rho_j}{\rho_a^{(i)}}\frac{\partial \rho_a^{(i)}}{\partial \rho_j}$$
 
-    A large $|J_{ij}|$ means gate $i$ is **very sensitive** to layer $j$; a value
-    near zero means gate $i$ carries almost no information about that layer.
-
-    The Jacobian is the cornerstone of the Gauss-Newton inversion — it is recomputed
-    at every iteration to guide the model update toward a better fit.
+    Both are **analytically computed**. Both methods use the same earth model. Each uses **20 data points**.
     """
 )
 
-with st.expander(":green[**Check your understanding — quiz**]"):
-    col1, col2 = st.columns(2)
-    with col1:
-        q1 = st.radio(
-            ":violet[**Which time gates are most sensitive to deep layers?**]",
-            ["Early times", "Late times", "All times equally", "It depends on loop size only"],
-            index=None,
-        )
-        if q1 == "Late times":
-            st.success("Correct! Eddy currents diffuse to depth over time, so late gates sample deeper structure.")
-        elif q1 is not None:
-            st.error("Think about where the eddy currents are at late times — they have diffused deep into the earth.")
+# -- Layout: model | TEM settings | VES settings -------------------------------
+col_mod, col_tem_s, col_ves_s = st.columns([4, 2, 2])
 
-    with col2:
-        q2 = st.radio(
-            ":violet[**What does a column of J near zero imply?**]",
-            [
-                "That layer has high resistivity",
-                "No time gate is sensitive to that layer — it cannot be resolved",
-                "The inversion has converged",
-                "The layer is very thick",
-            ],
-            index=None,
-        )
-        if q2 == "No time gate is sensitive to that layer — it cannot be resolved":
-            st.success("Correct! Layers with near-zero columns in J are poorly constrained by the data.")
-        elif q2 is not None:
-            st.error("A near-zero column means the data contain almost no information about that layer.")
+with col_mod:
+    st.subheader(":blue-background[Shared earth model]")
+    n_layers = int(st.number_input("Number of layers", 2, 6, 3, key="jac_n"))
+    thick, rho = _model_ui(n_layers)
 
-# ── Model controls ────────────────────────────────────────────────────────────
-st.subheader(":violet-background[Model & geometry]", divider="violet")
+with col_tem_s:
+    st.subheader(":violet-background[TEM settings]")
+    tx_area = st.number_input("Tx loop area (m²)", min_value=100, max_value=500000, value=1600, step=100, key="jac_tem_area")
+    tx_r    = float(np.sqrt(tx_area / np.pi))
+    t_min = st.slider("Earliest gate (10^x s)", -6.0, -4.0, -5.0, 0.25, key="jac_tem_tmin")
+    t_max = st.slider("Latest gate (10^x s)",   -3.0, -1.0, -2.0, 0.25, key="jac_tem_tmax")
+    filt_tem = "key_101"
 
-col_m, col_g = st.columns(2)
+with col_ves_s:
+    st.subheader(":orange-background[VES settings]")
+    ab2_min = st.slider("AB/2 minimum (m)",   1,    50,   1,   key="jac_ves_ab2min")
+    ab2_max = st.slider("AB/2 maximum (m)",  50,  2000, 300,   key="jac_ves_ab2max")
+    filt_ves = st.selectbox("Filter", ["gs7", "gs11", "gs22"], key="jac_ves_filt")
 
-with col_m:
-    st.markdown("**Layer model** — last row is the half-space, leave its Thickness empty")
-    _default_j = pd.DataFrame({
-        "Thickness (m)": [20.0, 60.0, None],
-        "Resistivity (Ω·m)": [100.0, 10.0, 300.0],
-    })
-    _edited_j = st.data_editor(
-        _default_j,
-        column_config={
-            "Thickness (m)": st.column_config.NumberColumn(
-                min_value=0.1, max_value=10000.0, format="%.1f",
-                help="Layer thickness in metres. Leave empty for the half-space.",
-            ),
-            "Resistivity (Ω·m)": st.column_config.NumberColumn(
-                min_value=0.01, max_value=1e6, format="%.1f",
-            ),
-        },
-        num_rows="dynamic",
-        use_container_width=True,
-        key="jac_model_editor",
-    )
-    _valid_j = _edited_j.dropna(subset=["Resistivity (Ω·m)"])
-    thicknesses_j = _valid_j["Thickness (m)"].dropna().tolist()
-    resistivities_j = _valid_j["Resistivity (Ω·m)"].tolist()
-    n_layers = len(resistivities_j)
-    if n_layers < 1:
-        st.warning("Add at least one layer.")
-        st.stop()
+# -- Compute -------------------------------------------------------------------
+times = np.logspace(t_min, t_max, _N_DATA)
+ab2   = np.logspace(np.log10(ab2_min), np.log10(ab2_max), _N_DATA)
+log_rho = np.log(np.array(rho))
 
-with col_g:
-    st.markdown("**Loop geometry & time axis**")
-    tx_r_j = st.number_input("Loop radius (m)", min_value=1.0, max_value=500.0, value=50.0, step=5.0, key="jac_r")
-    t_min_j = st.number_input("Early time (10^ˣ s)", min_value=-7.0, max_value=-3.0, value=-5.0, step=0.25, key="jtmin")
-    t_max_j = st.number_input("Late time (10^ˣ s)", min_value=-4.0, max_value=-1.0, value=-2.0, step=0.25, key="jtmax")
-    n_t_j = int(st.number_input("Number of time gates", min_value=5, max_value=60, value=20, step=1, key="jnt"))
+with st.spinner("Computing Jacobians ..."):
+    dbdt, J_tem          = _tem_jac(tuple(thick), tuple(log_rho.tolist()), tx_r, tuple(times.tolist()))
+    rhoap, J_ves_raw     = _ves_jac(tuple(ab2.tolist()), tuple(rho), tuple(thick), filt_ves)
 
-times_j = np.logspace(t_min_j, t_max_j, n_t_j)
+N = len(rho)
+J_ves = J_ves_raw[:, :N] * np.array(rho)[None, :] / rhoap[:, None]   # relative Jacobian
 
-# ── Compute Jacobian ──────────────────────────────────────────────────────────
-@st.cache_data(show_spinner=False)
-def compute_jacobian(thicknesses_t, log_res_t, tx_r, times_t):
-    thicknesses = list(thicknesses_t)
-    log_res = np.array(log_res_t)
-    resistivities = np.exp(log_res).tolist()
-    times = np.array(times_t)
-    dbdt = fwd_circle_central(thicknesses, resistivities, tx_radius=tx_r, times=times)
-    J = getJ_ana(
-        thicknesses, log_res, tx_r, times,
-        geometry="circle_central",
-        hankel_filter="key_101", fourier_filter="key_101",
-    )
-    return -dbdt, J  # flip sign for plotting
+# -- Plots ---------------------------------------------------------------------
+layer_lbls = [f"L{i+1}\n{rho[i]:.0f}" for i in range(N)]
 
+fig, axes = plt.subplots(2, 3, figsize=(15, 8))
+fig.subplots_adjust(hspace=0.45, wspace=0.35)
 
-log_res_j = np.log(resistivities_j)
+# -- TEM row --
+ax = axes[0, 0]
+ax.loglog(times * 1e3, dbdt, "o-", color="mediumpurple", ms=4, lw=1.5)
+ax.set_xlabel("Time (ms)")
+ax.set_ylabel(r"$|\partial B_z/\partial t|$ (T/s)")
+ax.set_title("TEM - decay curve")
+ax.grid(True, which="both", ls="--", alpha=0.4)
 
-with st.spinner("Computing Jacobian …"):
-    dbdt_j, J = compute_jacobian(
-        tuple(thicknesses_j), tuple(log_res_j), tx_r_j, tuple(times_j)
-    )
+ax = axes[0, 1]
+vmax = max(np.abs(J_tem).max(), 1e-9)
+im = ax.imshow(J_tem, aspect="auto", cmap="RdBu_r", vmin=-vmax, vmax=vmax)
+ax.set_xticks(range(N))
+ax.set_xticklabels(layer_lbls, fontsize=8)
+t_ticks = list(range(0, _N_DATA, max(1, _N_DATA // 5)))
+ax.set_yticks(t_ticks)
+ax.set_yticklabels([f"{times[k]*1e3:.2f} ms" for k in t_ticks], fontsize=8)
+ax.set_xlabel("Layer")
+ax.set_ylabel("Time gate")
+ax.set_title("TEM Jacobian")
+plt.colorbar(im, ax=ax)
 
-# ── Plot ──────────────────────────────────────────────────────────────────────
-st.subheader(":violet-background[Results]", divider="violet")
+ax = axes[0, 2]
+ax.bar(layer_lbls, np.linalg.norm(J_tem, axis=0), color="mediumpurple", alpha=0.8)
+ax.set_ylabel("Column norm")
+ax.set_title("TEM - sensitivity per layer")
+ax.grid(axis="y", ls="--", alpha=0.4)
 
-fig, axes = plt.subplots(1, 2, figsize=(13, 5))
+# -- VES row --
+ax = axes[1, 0]
+ax.loglog(ab2, rhoap, "o-", color="darkorange", ms=4, lw=1.5)
+ax.set_xlabel("AB/2 (m)")
+ax.set_ylabel(r"$\rho_a$ (Ohm$\cdot$m)")
+ax.set_title("VES - sounding curve")
+ax.grid(True, which="both", ls="--", alpha=0.4)
 
-# Left: dB/dt
-ax1 = axes[0]
-ax1.loglog(times_j * 1e3, dbdt_j, "o-", color="mediumpurple", ms=5, lw=1.5)
-ax1.set_xlabel("Time (ms)")
-ax1.set_ylabel(r"$|\partial B_z / \partial t|$  (T/s)")
-ax1.set_title("Predicted decay curve")
-ax1.grid(True, which="both", ls="--", alpha=0.4)
+ax = axes[1, 1]
+vmax = max(np.abs(J_ves).max(), 1e-9)
+im = ax.imshow(J_ves, aspect="auto", cmap="RdBu_r", vmin=-vmax, vmax=vmax)
+ax.set_xticks(range(N))
+ax.set_xticklabels(layer_lbls, fontsize=8)
+ab2_ticks = list(range(0, _N_DATA, max(1, _N_DATA // 5)))
+ax.set_yticks(ab2_ticks)
+ax.set_yticklabels([f"{ab2[k]:.1f} m" for k in ab2_ticks], fontsize=8)
+ax.set_xlabel("Layer")
+ax.set_ylabel("AB/2 spacing")
+ax.set_title("VES Jacobian (relative)")
+plt.colorbar(im, ax=ax)
 
-# Right: Jacobian heatmap
-ax2 = axes[1]
-layer_labels = [f"Layer {i+1}\n({resistivities_j[i]:.0f} Ω·m)" for i in range(n_layers)]
-time_labels = [f"{t*1e3:.2f}" for t in times_j]
+ax = axes[1, 2]
+ax.bar(layer_lbls, np.linalg.norm(J_ves, axis=0), color="darkorange", alpha=0.8)
+ax.set_ylabel("Column norm")
+ax.set_title("VES - sensitivity per layer")
+ax.grid(axis="y", ls="--", alpha=0.4)
 
-im = ax2.imshow(
-    J, aspect="auto", cmap="RdBu_r",
-    vmin=-np.abs(J).max(), vmax=np.abs(J).max(),
-)
-ax2.set_xticks(range(n_layers))
-ax2.set_xticklabels(layer_labels, fontsize=8)
-ax2.set_yticks(range(0, n_t_j, max(1, n_t_j // 8)))
-ax2.set_yticklabels(
-    [f"{times_j[k]*1e3:.2f} ms" for k in range(0, n_t_j, max(1, n_t_j // 8))],
-    fontsize=8,
-)
-ax2.set_xlabel("Layer (model parameter)")
-ax2.set_ylabel("Time gate")
-ax2.set_title(r"Jacobian  $J_{ij} = \partial\ln|\dot{B}_i|/\partial\ln\rho_j$")
-plt.colorbar(im, ax=ax2, label="Sensitivity")
-
-plt.tight_layout()
 st.pyplot(fig)
 plt.close(fig)
 
-# ── Column norms ──────────────────────────────────────────────────────────────
-st.subheader(":violet-background[Column norms — total sensitivity per layer]", divider="violet")
-col_norms = np.linalg.norm(J, axis=0)
-
-fig3, ax3 = plt.subplots(figsize=(6, 3))
-ax3.bar(layer_labels, col_norms, color="mediumpurple", alpha=0.8)
-ax3.set_ylabel(r"$\|\mathbf{J}_{:j}\|_2$")
-ax3.set_title("Total data sensitivity per layer")
-ax3.grid(axis="y", ls="--", alpha=0.4)
-plt.tight_layout()
-st.pyplot(fig3)
-plt.close(fig3)
-
-st.markdown(
-    """
-    **Reading the plots:**
-    - **Red** cells in the heatmap indicate that increasing that layer's resistivity
-      increases the dB/dt at that time gate.
-    - **Blue** cells indicate the opposite: increasing resistivity decreases dB/dt.
-    - Layers with small column norms (short bars) are poorly resolved — the data
-      provide little constraint on their resistivity.
-    """
+st.caption(
+    "Red = increasing resistivity raises the data value; blue = opposite. "
+    "Column norm = total information a layer contributes across all data points."
 )

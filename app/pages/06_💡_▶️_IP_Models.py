@@ -111,7 +111,8 @@ with col_m:
     if len(_ip_resistivities) < 2:
         st.warning("Need at least 2 layers: the IP layer and a half-space.")
         st.stop()
-    tx_r_ip = st.number_input("Loop radius (m)", min_value=1.0, max_value=500.0, value=50.0, step=5.0, key="ip_txr")
+    tx_area_ip = st.number_input("Tx loop area (m²)", min_value=100.0, max_value=500000.0, value=1600.0, step=100.0, key="ip_txr_area")
+    tx_r_ip = float(np.sqrt(tx_area_ip / np.pi))
     st.caption("The IP effect is applied to the second-to-last layer (the IP layer).")
 
 with col_ip:
@@ -127,6 +128,7 @@ thicknesses_ip = _ip_thicknesses
 resistivities_ip = _ip_resistivities
 # IP effect is applied to the second-to-last layer (index -2)
 _n_ip_layers = len(resistivities_ip)
+rho_ip_layer  = resistivities_ip[-2]
 
 # ── Forward without IP ─────────────────────────────────────────────────────────
 @st.cache_data(show_spinner=False)

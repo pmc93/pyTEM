@@ -441,15 +441,25 @@ def getAlpha(alpha_start, step, alpha_step=1/9):
 
 
 def getAlphas(alpha, thicknesses):
-    """Depth-weighted regularisation vector."""
-    thicknesses = np.asarray(thicknesses)
-    tops = np.cumsum(np.concatenate(([0], thicknesses[:-1])))
-    midpoints = tops + thicknesses / 2.0
-    del_z = np.diff(midpoints)
-    alpha_factor = np.empty(len(del_z) + 1, dtype=del_z.dtype)
-    alpha_factor[0] = 1 / del_z[0]
-    alpha_factor[1:-1] = 1 / del_z[:-1] + 1 / del_z[1:]
-    alpha_factor[-1] = 1 / del_z[-1]
+    """Depth-weighted regularisation vector.
+
+    Works with N-1 finite-layer thicknesses (standard pytem convention) and
+    returns N alpha factors (one per model parameter including the half-space).
+    The half-space midpoint is extrapolated one layer-thickness below the base
+    of the last finite layer.
+    """
+    thicknesses = np.asarray(thicknesses, dtype=float)
+    # Midpoints of every finite layer
+    tops       = np.cumsum(np.concatenate(([0.0], thicknesses[:-1])))
+    mid_finite = tops + thicknesses / 2.0
+    # Extrapolate one midpoint for the half-space
+    hs_mid     = tops[-1] + thicknesses[-1] + thicknesses[-1] / 2.0
+    midpoints  = np.append(mid_finite, hs_mid)          # N midpoints total
+    del_z      = np.diff(midpoints)                      # N-1 spacings
+    alpha_factor = np.empty(len(del_z) + 1, dtype=del_z.dtype)  # N values
+    alpha_factor[0]    = 1.0 / del_z[0]
+    alpha_factor[1:-1] = 1.0 / del_z[:-1] + 1.0 / del_z[1:]
+    alpha_factor[-1]   = 1.0 / del_z[-1]
     return alpha * alpha_factor
 
 
@@ -698,7 +708,8 @@ def invert(obs_data, thicknesses, log_resistivities, tx_radius, times,
            waveform_times=None, waveform_currents=None, n_step=200,
            waveform_n_quad=5,
            geometry='circle_central', n_quad=5,
-           rx_offset=0.0, rx_y=0.0, circle_warmstart=False):
+           rx_offset=0.0, rx_y=0.0, circle_warmstart=False,
+           rms_target=1.0):
     """Regularised Gauss-Newton inversion for 1-D layered-earth TEM.
 
     Minimises  phi(m) = ||W (ln d_obs - ln d_pred(m))||^2 + alpha * m^T R m
@@ -1014,8 +1025,8 @@ def invert(obs_data, thicknesses, log_resistivities, tx_radius, times,
         elapsed = _time_mod.time() - t_loop
         print(f"Iteration {it + 1:>3d}:  RMS = {rms:.2f}")
 
-        if rms <= 1.0:
-            print("  RMS <= 1 - converged.")
+        if rms <= rms_target:
+            print(f"  RMS <= {rms_target} - converged.")
             break
 
         if it > 0:

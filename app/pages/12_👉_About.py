@@ -191,4 +191,4 @@ st.markdown(
 )
 
 st.divider()
-st.caption("pyTEM TEM Explorer | Built with Streamlit | DTU")
+st.caption("TEM vs VES | Built with Streamlit | DTU")
