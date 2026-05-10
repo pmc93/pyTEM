@@ -15,7 +15,7 @@ from pytem import fwd_circle_central
 from pytem.ip_models import pelton_res_rho, cole_cole_rho, tem_forward_ip
 
 # ── Page header ───────────────────────────────────────────────────────────────
-st.header(":blue[Induced Polarisation effects in TEM data]")
+st.header(":steelblue[Induced Polarisation effects in TEM data]")
 
 st.markdown(
     r"""
@@ -23,43 +23,42 @@ st.markdown(
     minerals (e.g. disseminated sulphides or clay particles). During the TEM
     transient, part of the energy is stored in the polarisation of these minerals
     rather than flowing as Ohm's-law current. When the electric field relaxes,
-    this stored energy is released — generating a secondary response that can
+    this stored energy is released, generating a secondary response that can
     **reverse the sign** of the late-time dB/dt signal.
 
     IP effects are modelled by replacing the real DC resistivity $\rho_0$ with a
     **complex, frequency-dependent resistivity** $\rho(\omega)$. Two common models are:
 
-    **Pelton et al. (1978) — resistivity formulation:**
+    **Pelton et al. (1978): resistivity formulation:**
 
     $$\rho(\omega) = \rho_0\!\left[1 - m\!\left(1 - \frac{1}{1 + (j\omega\tau)^c}\right)\right]$$
 
-    **Cole-Cole (1941) — conductivity formulation:**
+    **Cole-Cole (1941): conductivity formulation:**
 
-    $$\sigma(\omega) = \sigma_\infty + \frac{\sigma_0 - \sigma_\infty}{1 + (j\omega\tau)^c},
-    \qquad \rho(\omega) = 1/\sigma(\omega)$$
+    $$\sigma(\omega) = \sigma_\infty + \frac{\sigma_0 - \sigma_\infty}{1 + (j\omega\tau)^c}, \qquad \rho(\omega) = 1/\sigma(\omega)$$
 
     The key IP parameters are:
-    - $m$ — chargeability (dimensionless, 0–1); controls the magnitude of the IP effect
-    - $\tau$ — relaxation time (s); controls which time range shows the sign reversal
-    - $c$ — frequency exponent (0–1); controls the breadth of the relaxation peak
+    - $m$: chargeability (dimensionless, 0–1); controls the magnitude of the IP effect
+    - $\tau$: relaxation time (s); controls which time range shows the sign reversal
+    - $c$: frequency exponent (0–1); controls the breadth of the relaxation peak
     """
 )
 
 st.info(
     "**Why TEM only?** IP is a frequency-dependent (or transient) phenomenon. "
     "Standard VES injects steady DC current and records a static voltage ratio, "
-    "so it only senses the real ohmic resistivity — there is no time window after "
+    "so it only senses the real ohmic resistivity; there is no time window after "
     "current cutoff to capture a polarisation transient. TEM is sensitive to IP "
     "precisely because the measurement *is* the transient decay: a polarisable "
     "layer stores energy during the current-on phase and releases it after switch-off, "
     "which can reverse the sign of the late-time dB/dt. "
     "Measuring IP with a DC survey requires a separate acquisition mode "
-    "(time-domain IP / TDIP) that records the voltage decay after cutoff — "
+    "(time-domain IP / TDIP) that records the voltage decay after cutoff; "
     "this is not part of a standard VES survey.",
     icon="ℹ️",
 )
 
-with st.expander(":green[**Check your understanding — quiz**]"):
+with st.expander(":green[**Check your understanding: quiz**]"):
     col1, col2 = st.columns(2)
     with col1:
         q1 = st.radio(
@@ -75,7 +74,7 @@ with st.expander(":green[**Check your understanding — quiz**]"):
         if q1 == "Sign reversal (negative dBdt becoming positive) at late times":
             st.success("Correct! IP causes the delayed release of stored polarisation energy, which can produce a sign reversal in the late-time dB/dt.")
         elif q1 is not None:
-            st.error("The characteristic signature is a sign reversal at late times — the dB/dt changes sign due to the IP secondary response.")
+            st.error("The characteristic signature is a sign reversal at late times; the dB/dt changes sign due to the IP secondary response.")
 
     with col2:
         q2 = st.radio(
@@ -99,7 +98,7 @@ st.subheader(":orange-background[Earth model with IP layer]", divider="orange")
 col_m, col_ip = st.columns(2)
 
 with col_m:
-    st.markdown("**Background model** — last row is the half-space, leave its Thickness empty")
+    st.markdown("**Background model**: last row is the half-space, leave its Thickness empty")
     _default_ip = pd.DataFrame({
         "Thickness (m)": [30.0, 60.0, None],
         "Resistivity (Ω·m)": [100.0, 50.0, 300.0],
@@ -243,7 +242,7 @@ plt.close(fig)
 if neg_mask.any():
     st.warning(
         f"Sign reversal detected at {times_ip[neg_mask][0]*1e3:.2f} ms "
-        "— triangles on the log-log plot mark these reversed-sign values. "
+        "Triangles on the log-log plot mark these reversed-sign values. "
         "In practice the sign reversal is the key diagnostic for IP in TEM data."
     )
 else:

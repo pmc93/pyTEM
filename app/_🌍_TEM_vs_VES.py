@@ -5,20 +5,32 @@ st.set_page_config(
     page_icon="🌍",
 )
 
-st.header(":blue[Two methods for mapping subsurface resistivity]")
+st.header(":blue[Resistivity methods for groundwater investigation]")
 
 st.markdown(
-    """
-    The **TEM** (transient electromagnetic) and **VES** (vertical electrical sounding) methods
-    are two geophysical methods that map the subsurface resistivity
-    structure. However, they work in fundamentally different ways.
+    r"""
+    Deciding where to drill a borehole is one of the most consequential (and costly) steps
+    in a groundwater investigation. Drilling is expensive, and a dry or unproductive well
+    wastes resources and delays access to water. Geophysical methods allow us to image the
+    subsurface **before drilling**, mapping the depth, thickness, and physical properties of
+    aquifer materials across a site.
+
+    The key physical property linking geophysics to groundwater is **electrical resistivity**.
+    Resistivity varies with lithology and, to some extent, water quality: saturated sands and
+    gravels are moderately conductive, clay-rich layers are highly conductive, basement rock
+    is resistive, and saline water dramatically lowers resistivity. By mapping resistivity
+    with depth, we can identify potential aquifer horizons, estimate depths to the water table,
+    and detect saline intrusion; all without a single drill hole. 
+    
+    Two methods that  are sensitive to subsurface resistivity are **TEM** (transient electromagnetic) and **VES** (vertical electrical sounding):
+    both map the subsurface resistivity structure, but they work in fundamentally different ways.
     """
 )
 
 col1, col2 = st.columns(2)
 
 with col1:
-    st.subheader(":blue[🧲 TEM - Transient Electromagnetic Method]")
+    st.subheader(":steelblue[🧲 TEM - Transient Electromagnetic Method]")
     st.markdown(
         r"""
         A large transmitter (Tx) loop carries a steady current that is abruptly
@@ -26,8 +38,8 @@ with col1:
         that diffuse downward through the earth. A receiver (Rx) coil records the
         decaying secondary field dB/dt.
 
-        - **Source**: inductive — no ground contact needed
-        - **Depth proxy**: time — early = shallow, late = deep
+        - **Source**: inductive, no ground contact needed
+        - **Depth proxy**: time (early = shallow, late = deep)
         - **Best for**: conductive targets (clay, saline water)
         - **Data**: dB/dt decay curve (V/m²)
         """
@@ -41,8 +53,8 @@ with col2:
         measures the resulting voltage. Increasing the electrode spacing AB/2
         drives current deeper, sampling greater depth.
 
-        - **Source**: galvanic — electrodes must contact the ground
-        - **Depth proxy**: AB electrode spacing — small = shallow, large = deep
+        - **Source**: galvanic, electrodes must contact the ground
+        - **Depth proxy**: AB electrode spacing (small = shallow, large = deep)
         - **Best for**: resistive layers and general stratigraphy
         - **Data**: apparent resistivity curve $\rho_a$(AB/2)
         """
@@ -70,27 +82,29 @@ st.markdown(
     | Source | Inductive loop | Galvanic electrodes |
     | Depth proxy | Time | AB electrode spacing |
     | Ground contact | Not required | Required |
-    | Best sensitivity | Conductive layers | Both — but resistors harder |
+    | Best sensitivity | Conductive layers | Both, but resistors harder |
     | Key limitation | Noise floor at late times | Equivalence (thin resistors) |
     | Lateral footprint | Tx loop area | AB electrode spacing |
     | Model output | Resistivity + thickness | Resistivity + thickness |
     """
 )
 
+st.divider()
+
 st.subheader(':blue[Module overview]', divider="blue")
 
 st.markdown(
     """
     :blue[The module is organised as follows:]
-    - 📈 **Forward Modeling ▶️** — build a layered earth model and compute the predicted
+    - 📈 **Forward Modeling ▶️**: build a layered earth model and compute the predicted
       dB/dt (TEM) and apparent resistivity curve (VES) in real time.
-    - 📊 **Jacobian & Sensitivity ▶️** — explore which data points are sensitive to which
+    - 📊 **Jacobian & Sensitivity ▶️**: explore which data points are sensitive to which
       layers; compare TEM and VES sensitivity side by side.
-    - 🎯 **Inversion ▶️** — run a synthetic inversion for TEM and VES
+    - 🎯 **Inversion ▶️**: run a synthetic inversion for TEM and VES
       and inspect how well each recovers the true model.
-    -  **IP Models ▶️** — add induced-polarisation effects (Cole-Cole) to individual
+    - 💡 **IP Models ▶️**: add induced-polarisation effects (Cole-Cole) to individual
       layers and observe the characteristic sign reversal in the TEM decay.
-    - 👉 **About** — references and acknowledgements.
+    - 👉 **About**: references and acknowledgements.
     """
 )
 

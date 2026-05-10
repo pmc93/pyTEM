@@ -26,7 +26,6 @@ from pytem.ip_models import tem_forward_ip, pelton_res_rho
 from ves import forward as ves_forward, invert as ves_invert, jacobian as ves_jacobian, forward_ip as ves_forward_ip
 
 # -- Page header ---------------------------------------------------------------
-st.title("Inversion")
 st.header(":red[Recover a resistivity model from noisy data]")
 
 st.markdown(

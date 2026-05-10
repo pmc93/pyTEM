@@ -70,7 +70,7 @@ def _ves_fwd(ab2_t, rho_t, h_t, filt):
 st.header(":blue[Predicted response for a layered earth model]")
 st.markdown(
     "Build a layered resistivity model and see the predicted sounding curve "
-    "update in real time. Each tab is independent — you can explore different "
+    "update in real time. Each tab is independent; you can explore different "
     "models for TEM and VES."
 )
 

@@ -26,8 +26,8 @@ st.markdown(
     [PyVES library](https://github.com/asidosaputra/PyVES) by Asido Saputra, which implements
     1-D DC resistivity forward modelling using digital linear filter coefficients
     (Guptasarma & Singh 1997) and Levenberg-Marquardt inversion.
-    The version included here has been adapted and extended to integrate with the pyTEM
-    modelling and app framework.
+    The version included here replaces the inversion with regularised Gauss-Newton and
+    has been extended to integrate with the pyTEM modelling and app framework.
     """
 )
 
