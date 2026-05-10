@@ -1,3 +1,4 @@
+-e .
 streamlit>=1.44
 numpy
 matplotlib
