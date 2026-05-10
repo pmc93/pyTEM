@@ -72,11 +72,19 @@ st.header(":violet[Which data points are sensitive to which layers?]")
 
 st.markdown(
     r"""
-    The Jacobian $\mathbf{J}$ measures how each data point responds to a perturbation in each layer:
+    **TEM** measures a transient electromagnetic signal that decays over time.
+    Early time gates see shallow structure; late gates see deeper structure.
+    The data are plotted as $|\partial B_z / \partial t|$ vs time on a log-log scale.
 
-    $$J_{ij}^{\text{TEM}} = \frac{\partial \ln|\dot{B}_i|}{\partial \ln\rho_j}, \qquad J_{ij}^{\text{VES}} = \frac{\rho_j}{\rho_a^{(i)}}\frac{\partial \rho_a^{(i)}}{\partial \rho_j}$$
+    **VES** injects current into the ground and measures voltage.
+    Increasing electrode spacing AB/2 samples progressively greater depth.
+    The data are plotted as apparent resistivity $\rho_a$ vs AB/2 on a log-log scale.
 
-    Both are **analytically computed**. Both methods use the same earth model. Each uses **20 data points**.
+    The **Jacobian** $J_{ij}$ is the sensitivity of data point $i$ to layer $j$:
+    a large $|J_{ij}|$ means that data point carries information about that layer.
+    Red cells mean increasing the layer's resistivity raises the data value; blue means the opposite.
+    The **column norm** (bar chart) is the total sensitivity across all data points for each layer
+    -- a small bar means the layer is poorly constrained by the data.
     """
 )
 
@@ -124,7 +132,7 @@ fig.subplots_adjust(hspace=0.45, wspace=0.35)
 ax = axes[0, 0]
 ax.loglog(times * 1e3, dbdt, "o-", color="mediumpurple", ms=4, lw=1.5)
 ax.set_xlabel("Time (ms)")
-ax.set_ylabel(r"$|\partial B_z/\partial t|$ (T/s)")
+ax.set_ylabel(r"$|\partial B_z/\partial t|$ (A/m$^2$)")
 ax.set_title("TEM - decay curve")
 ax.grid(True, which="both", ls="--", alpha=0.4)
 
@@ -149,9 +157,13 @@ ax.grid(axis="y", ls="--", alpha=0.4)
 
 # -- VES row --
 ax = axes[1, 0]
+_span_ves = np.log10(rhoap.max()) - np.log10(rhoap.min())
+_ctr_ves  = (np.log10(rhoap.max()) + np.log10(rhoap.min())) / 2
+if _span_ves < 2.5:
+    ax.set_ylim(10 ** (_ctr_ves - 1.25), 10 ** (_ctr_ves + 1.25))
 ax.loglog(ab2, rhoap, "o-", color="darkorange", ms=4, lw=1.5)
 ax.set_xlabel("AB/2 (m)")
-ax.set_ylabel(r"$\rho_a$ (Ohm$\cdot$m)")
+ax.set_ylabel("Apparent resistivity (Ohm.m)")
 ax.set_title("VES - sounding curve")
 ax.grid(True, which="both", ls="--", alpha=0.4)
 
@@ -181,3 +193,84 @@ st.caption(
     "Red = increasing resistivity raises the data value; blue = opposite. "
     "Column norm = total information a layer contributes across all data points."
 )
+
+with st.expander(":green[Check your understanding -- quiz]"):
+    col1, col2 = st.columns(2)
+    with col1:
+        qa = st.radio(
+            ":red[**Which TEM time gates are most sensitive to deep layers?**]",
+            ["Early gates (short times)", "Late gates (long times)",
+             "All gates equally", "Middle gates only"],
+            index=None, key="jac_q1",
+        )
+        if qa == "Late gates (long times)":
+            st.success("Correct! The EM field diffuses deeper over time, so late gates sample deeper structure.")
+        elif qa is not None:
+            st.error("Think about how the electromagnetic field diffuses into the ground over time.")
+    with col2:
+        qb = st.radio(
+            ":red[**What does a small column norm mean for a layer?**]",
+            ["The layer is very resistive",
+             "The layer is poorly constrained by the data",
+             "The layer is too thin to detect",
+             "The inversion will converge faster"],
+            index=None, key="jac_q2",
+        )
+        if qb == "The layer is poorly constrained by the data":
+            st.success("Correct! A small column norm means few data points respond to that layer.")
+        elif qb is not None:
+            st.error("Column norm measures how much information the data carries about a given layer.")
+
+with st.expander(":green[Check your understanding -- quiz]"):
+    col1, col2 = st.columns(2)
+    with col1:
+        qa = st.radio(
+            ":red[**Which TEM time gates are most sensitive to deep layers?**]",
+            ["Early gates (short times)", "Late gates (long times)",
+             "All gates equally", "Middle gates only"],
+            index=None, key="jac_q1",
+        )
+        if qa == "Late gates (long times)":
+            st.success("Correct! The electromagnetic signal diffuses deeper over time, so late gates sample deeper structure.")
+        elif qa is not None:
+            st.error("Think about how the EM field diffuses into the ground over time.")
+    with col2:
+        qb = st.radio(
+            ":red[**What does a small column norm mean for a layer?**]",
+            ["The layer is very resistive",
+             "The layer is poorly constrained by the data",
+             "The layer is too thin to detect",
+             "The inversion will converge faster"],
+            index=None, key="jac_q2",
+        )
+        if qb == "The layer is poorly constrained by the data":
+            st.success("Correct! A small column norm means few data points respond to that layer, so it cannot be recovered reliably.")
+        elif qb is not None:
+            st.error("The column norm is a measure of how much information the data carries about a given layer.")
+
+with st.expander(":green[Check your understanding -- quiz]"):
+    col1, col2 = st.columns(2)
+    with col1:
+        qa = st.radio(
+            ":red[**Which TEM time gates are most sensitive to deep layers?**]",
+            ["Early gates (short times)", "Late gates (long times)",
+             "All gates equally", "Middle gates only"],
+            index=None, key="jac_q1",
+        )
+        if qa == "Late gates (long times)":
+            st.success("Correct! The electromagnetic signal diffuses deeper over time, so late gates sample deeper structure.")
+        elif qa is not None:
+            st.error("Think about how the EM field diffuses into the ground over time.")
+    with col2:
+        qb = st.radio(
+            ":red[**What does a small column norm mean for a layer?**]",
+            ["The layer is very resistive",
+             "The layer is poorly constrained by the data",
+             "The layer is too thin to detect",
+             "The inversion will converge faster"],
+            index=None, key="jac_q2",
+        )
+        if qb == "The layer is poorly constrained by the data":
+            st.success("Correct! A small column norm means few data points respond to that layer, so it cannot be recovered reliably.")
+        elif qb is not None:
+            st.error("The column norm is a measure of how much information the data carries about a given layer.")

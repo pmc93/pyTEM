@@ -28,11 +28,11 @@ def _model_ui(prefix, n, def_rho, def_h):
         c[0].markdown(f"**{'Layer ' + str(i+1) if i < n-1 else 'Half-space'}**")
         if i < n - 1:
             h_def = int(def_h[i]) if i < len(def_h) else 20
-            h_out.append(float(c[1].slider("", 1, 500, h_def,
+            h_out.append(float(c[1].slider(f"Thickness {i+1} (m)", 1, 500, h_def,
                                             key=f"{prefix}_h{i}",
                                             label_visibility="collapsed")))
         rho_def = min(_RHO, key=lambda x: abs(x - (def_rho[i] if i < len(def_rho) else 100)))
-        r_out.append(float(c[2].select_slider("", _RHO, value=rho_def,
+        r_out.append(float(c[2].select_slider(f"Resistivity {i+1} (Ohm.m)", _RHO, value=rho_def,
                                                key=f"{prefix}_r{i}",
                                                label_visibility="collapsed")))
     return h_out, r_out
@@ -104,7 +104,7 @@ with tab_tem:
 
     ax1.loglog(times * 1e3, dbdt, "o-", color="steelblue", ms=4, lw=1.5)
     ax1.set_xlabel("Time (ms)")
-    ax1.set_ylabel(r"$|\partial B_z/\partial t|$ (T/s)")
+    ax1.set_ylabel(r"$|\partial B_z/\partial t|$ (A/m$^2$)")
     ax1.set_title("TEM decay curve")
     ax1.grid(True, which="both", ls="--", alpha=0.4)
 
@@ -150,9 +150,16 @@ with tab_ves:
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
 
+    _span_v = np.log10(rhoap.max()) - np.log10(rhoap.min())
+    if _span_v < 2.5:
+        _ctr_v = (np.log10(rhoap.max()) + np.log10(rhoap.min())) / 2
+        _vlo, _vhi = 10 ** (_ctr_v - 1.25), 10 ** (_ctr_v + 1.25)
+    else:
+        _vlo, _vhi = rhoap.min() * 0.8, rhoap.max() * 1.25
     ax1.loglog(ab2, rhoap, "o-", color="darkorange", ms=4, lw=1.5)
+    ax1.set_ylim(_vlo, _vhi)
     ax1.set_xlabel(r"$AB/2$ (m)")
-    ax1.set_ylabel(r"$\rho_a$ (Ω·m)")
+    ax1.set_ylabel("Apparent resistivity (Ohm.m)")
     ax1.set_title("VES sounding curve")
     ax1.grid(True, which="both", ls="--", alpha=0.4)
 

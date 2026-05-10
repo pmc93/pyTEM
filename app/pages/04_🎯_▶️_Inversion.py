@@ -243,57 +243,58 @@ if run_btn or "joint_inv_result" in st.session_state:
     col_m3.metric("VES final RMS", f"{_ves_rms_norm:.3f}" if _ves_rms_norm is not None else "-", help="Target ~1.0")
     col_m4.metric("VES iterations", len(rms_ves))
 
-    # -- 2Ã—2 results grid ------------------------------------------------------
-    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+    # -- 2Ã—2 results grid: 2 data fits + combined model -------------------------
+    fig = plt.figure(figsize=(14, 10))
+    gs  = fig.add_gridspec(2, 2, hspace=0.38, wspace=0.3)
+    ax_tem_data = fig.add_subplot(gs[0, 0])
+    ax_ves_data = fig.add_subplot(gs[0, 1])
+    ax_model    = fig.add_subplot(gs[1, :])
 
     # TEM data fit
-    ax = axes[0, 0]
-    ax.loglog(times * 1e3, dbdt_obs,  "ko",  ms=4,  label="Observed (noisy)", zorder=3)
-    ax.loglog(times * 1e3, dbdt_fwd,  "g--", lw=2,  label="True")
-    ax.loglog(times * 1e3, dbdt_pred, "r-",  lw=1.5, label="Predicted")
+    ax = ax_tem_data
+    ax.loglog(times * 1e3, dbdt_fwd,  "g--", lw=2,   label="True", zorder=2)
+    ax.loglog(times * 1e3, dbdt_pred, "r-",  lw=1.5, label="Predicted", zorder=3)
+    ax.loglog(times * 1e3, dbdt_obs,  "ko",  ms=4,   label="Observed (noisy)", zorder=4)
     ax.set_xlabel("Time (ms)")
-    ax.set_ylabel(r"$|\partial B_z/\partial t|$ (T/s)")
-    ax.set_title("TEM â€” data fit")
+    ax.set_ylabel(r"$|\partial B_z/\partial t|$ (A/m$^2$)")
+    ax.set_title("TEM - data fit")
     ax.grid(True, which="both", ls="--", alpha=0.4)
     ax.legend(fontsize=8)
 
     # VES data fit
-    ax = axes[0, 1]
-    ax.loglog(ab2, rhoap_obs,  "ko",  ms=4,  label="Observed (noisy)", zorder=3)
-    ax.loglog(ab2, rhoap_true, "g--", lw=2,  label="True")
-    ax.loglog(ab2, rhoap_pred, "b-",  lw=1.5, label="Predicted")
+    ax = ax_ves_data
+    _rho_all = np.concatenate([rhoap_obs, rhoap_true, rhoap_pred])
+    _span = np.log10(_rho_all.max()) - np.log10(_rho_all.min())
+    _ctr  = (np.log10(_rho_all.max()) + np.log10(_rho_all.min())) / 2
+    if _span < 2.5:
+        _rlo, _rhi = 10 ** (_ctr - 1.25), 10 ** (_ctr + 1.25)
+    else:
+        _rlo, _rhi = _rho_all.min() * 0.8, _rho_all.max() * 1.25
+    ax.loglog(ab2, rhoap_true, "g--", lw=2,   label="True", zorder=2)
+    ax.loglog(ab2, rhoap_pred, "b-",  lw=1.5, label="Predicted", zorder=3)
+    ax.loglog(ab2, rhoap_obs,  "ko",  ms=4,   label="Observed (noisy)", zorder=4)
+    ax.set_ylim(_rlo, _rhi)
     ax.set_xlabel("AB/2 (m)")
-    ax.set_ylabel("Apparent resistivity (OhmÂ·m)")
-    ax.set_title("VES â€” data fit")
+    ax.set_ylabel("Apparent resistivity (Ohm.m)")
+    ax.set_title("VES - data fit")
     ax.grid(True, which="both", ls="--", alpha=0.4)
     ax.legend(fontsize=8)
 
-    # TEM model
-    ax = axes[1, 0]
+    # Combined recovered model
+    ax = ax_model
     r_true, d_true = _stair(true_thick, true_rho)
     r_tem,  d_tem  = _stair(list(thick_tem_r), list(rho_tem_r))
-    ax.semilogx(r_true, d_true, "g--", lw=2,   label="True model")
+    r_ves,  d_ves  = _stair(list(thick_ves_r), list(rho_ves_r))
+    ax.semilogx(r_true, d_true, "g--", lw=2.5, label="True model")
     ax.semilogx(r_tem,  d_tem,  "r-",  lw=2,   label="TEM recovered")
-    ax.invert_yaxis()
-    ax.set_xlabel("Resistivity (OhmÂ·m)")
-    ax.set_ylabel("Depth (m)")
-    ax.set_title("TEM â€” recovered model")
-    ax.grid(True, which="both", ls="--", alpha=0.4)
-    ax.legend(fontsize=8)
-
-    # VES model
-    ax = axes[1, 1]
-    r_ves, d_ves = _stair(list(thick_ves_r), list(rho_ves_r))
-    ax.semilogx(r_true, d_true, "g--", lw=2,   label="True model")
     ax.semilogx(r_ves,  d_ves,  "b-",  lw=2,   label="VES recovered")
     ax.invert_yaxis()
-    ax.set_xlabel("Resistivity (OhmÂ·m)")
+    ax.set_xlabel("Resistivity (Ohm.m)")
     ax.set_ylabel("Depth (m)")
-    ax.set_title("VES â€” recovered model")
+    ax.set_title("Recovered model: TEM and VES")
     ax.grid(True, which="both", ls="--", alpha=0.4)
     ax.legend(fontsize=8)
 
-    plt.tight_layout()
     st.pyplot(fig)
     plt.close(fig)
 
