@@ -86,7 +86,7 @@ st.markdown(
       dB/dt (TEM) and apparent resistivity curve (VES) in real time.
     - 📊 **Jacobian & Sensitivity ▶️** — explore which data points are sensitive to which
       layers; compare TEM and VES sensitivity side by side.
-    - 🎯 **Inversion ▶️** — run a synthetic inversion for TEM and VES (both Gauss-Newton)
+    - 🎯 **Inversion ▶️** — run a synthetic inversion for TEM and VES
       and inspect how well each recovers the true model.
     -  **IP Models ▶️** — add induced-polarisation effects (Cole-Cole) to individual
       layers and observe the characteristic sign reversal in the TEM decay.
