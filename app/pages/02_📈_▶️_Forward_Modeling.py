@@ -72,7 +72,6 @@ def _ves_fwd(ab2_t, rho_t, h_t, filt):
 
 
 # ── Page header ───────────────────────────────────────────────────────────────
-st.title("📈 Forward Modeling ▶️")
 st.header(":blue[Predicted response for a layered earth model]")
 st.markdown(
     "Build a layered resistivity model and see the predicted sounding curve "
@@ -80,13 +79,13 @@ st.markdown(
     "models for TEM and VES."
 )
 
-tab_tem, tab_ves = st.tabs(["⚡ TEM", "📈 VES"])
+tab_tem, tab_ves = st.tabs(["🧲 TEM", "⚡️ VES"])
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # TEM TAB
 # ═══════════════════════════════════════════════════════════════════════════════
 with tab_tem:
-    st.subheader(":blue-background[TEM — dB/dt sounding]", divider="blue")
+    st.subheader(":blue-background[TEM - dB/dt sounding]", divider="blue")
 
     col_m, col_s = st.columns([3, 2])
 
@@ -97,7 +96,7 @@ with tab_tem:
                                     [100, 10, 300], [20, 50])
 
     with col_s:
-        st.markdown("**Loop & time axis**")
+        st.markdown("**System Parameters**")
         tx_area = st.number_input("Tx loop area (m²)", min_value=100, max_value=500000, value=1600, step=100, key="fwd_tem_area")
         tx_r = float(np.sqrt(tx_area / np.pi))
         t_min = st.slider("Early time (10^x s)", -6.0, -4.0, -5.0, 0.25, key="fwd_tem_tmin")
@@ -106,8 +105,7 @@ with tab_tem:
 
     times = np.logspace(t_min, t_max, n_t)
 
-    st.button("⚡ Compute forward model", key="fwd_tem_btn", type="primary",
-              help="Manually trigger computation (also updates automatically on slider change)")
+    st.button("🧮 Compute forward model", key="fwd_tem_btn", type="primary")
 
     try:
         with st.spinner("Computing …"):
@@ -117,8 +115,7 @@ with tab_tem:
 
         ax1.loglog(times * 1e3, dbdt, "o-", color="steelblue", ms=4, lw=1.5)
         ax1.set_xlabel("Time (ms)")
-        ax1.set_ylabel(r"$|\partial B_z/\partial t|$ (A/m$^2$)")
-        ax1.set_title("TEM decay curve")
+        ax1.set_ylabel(r"|dB/dt| [A/m$^2$]")
         ax1.grid(True, which="both", ls="--", alpha=0.4)
 
         rs, ds = _stair(t_thick, t_rho)
@@ -129,25 +126,24 @@ with tab_tem:
         else:
             _mlo, _mhi = min(r for r in rs if r > 0) * 0.8, max(rs) * 1.25
         ax2.semilogx(rs, ds, color="steelblue", lw=2)
-        ax2.fill_betweenx(ds, rs, alpha=0.15, color="steelblue")
+        #ax2.fill_betweenx(ds, rs, alpha=0.15, color="steelblue")
         ax2.set_xlim(_mlo, _mhi)
         ax2.invert_yaxis()
-        ax2.set_xlabel(r"Resistivity (Ohm.m)")
-        ax2.set_ylabel("Depth (m)")
-        ax2.set_title("Earth model")
+        ax2.set_xlabel(r"Resistivity [Ohm.m]")
+        ax2.set_ylabel("Depth [m]")
         ax2.grid(True, which="both", ls="--", alpha=0.4)
 
         plt.tight_layout()
         st.pyplot(fig)
         plt.close(fig)
     except Exception as _e:
-        st.warning(f"⚠️ Could not compute: {_e}. Adjust the sliders and click **⚡ Compute forward model**.")
+        st.warning(f"⚠️ Could not compute: {_e}. Adjust the sliders and click **🧮 Compute forward model**.")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # VES TAB
 # ═══════════════════════════════════════════════════════════════════════════════
 with tab_ves:
-    st.subheader(":orange-background[VES — apparent resistivity sounding]", divider="orange")
+    st.subheader(":orange-background[VES - Apparent resistivity sounding]", divider="orange")
 
     col_m, col_s = st.columns([3, 2])
 
@@ -158,7 +154,7 @@ with tab_ves:
                                     [100, 20, 200], [10, 30])
 
     with col_s:
-        st.markdown("**Survey settings**")
+        st.markdown("**Survey Parameters**")
         ab2_min = st.slider("AB/2 minimum (m)", 1, 30, 1, key="fwd_ves_ab2min")
         ab2_max = st.slider("AB/2 maximum (m)", 50, 2000, 300, key="fwd_ves_ab2max")
         n_ab2 = int(st.number_input("AB/2 points", 5, 60, 25, key="fwd_ves_nab2"))
@@ -183,9 +179,8 @@ with tab_ves:
             _vlo, _vhi = rhoap.min() * 0.8, rhoap.max() * 1.25
         ax1.loglog(ab2, rhoap, "o-", color="darkorange", ms=4, lw=1.5)
         ax1.set_ylim(_vlo, _vhi)
-        ax1.set_xlabel(r"$AB/2$ (m)")
-        ax1.set_ylabel("Apparent resistivity (Ohm.m)")
-        ax1.set_title("VES sounding curve")
+        ax1.set_xlabel(r"$AB/2$ [m]")
+        ax1.set_ylabel("Apparent resistivity [Ohm.m]")
         ax1.grid(True, which="both", ls="--", alpha=0.4)
 
         rs, ds = _stair(v_thick, v_rho)
@@ -196,12 +191,11 @@ with tab_ves:
         else:
             _mlo, _mhi = min(r for r in rs if r > 0) * 0.8, max(rs) * 1.25
         ax2.semilogx(rs, ds, color="darkorange", lw=2)
-        ax2.fill_betweenx(ds, rs, alpha=0.15, color="darkorange")
+        #ax2.fill_betweenx(ds, rs, alpha=0.15, color="darkorange")
         ax2.set_xlim(_mlo, _mhi)
         ax2.invert_yaxis()
-        ax2.set_xlabel(r"Resistivity (Ohm.m)")
-        ax2.set_ylabel("Depth (m)")
-        ax2.set_title("Earth model")
+        ax2.set_xlabel(r"Resistivity [Ohm.m]")
+        ax2.set_ylabel("Depth [m]")
         ax2.grid(True, which="both", ls="--", alpha=0.4)
 
         plt.tight_layout()

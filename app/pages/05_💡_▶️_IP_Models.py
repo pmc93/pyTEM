@@ -15,8 +15,7 @@ from pytem import fwd_circle_central
 from pytem.ip_models import pelton_res_rho, cole_cole_rho, tem_forward_ip
 
 # ── Page header ───────────────────────────────────────────────────────────────
-st.title("💡 IP Models ▶️")
-st.header(":orange[Induced Polarisation effects in TEM data]")
+st.header(":blue[Induced Polarisation effects in TEM data]")
 
 st.markdown(
     r"""
@@ -44,6 +43,20 @@ st.markdown(
     - $\tau$ — relaxation time (s); controls which time range shows the sign reversal
     - $c$ — frequency exponent (0–1); controls the breadth of the relaxation peak
     """
+)
+
+st.info(
+    "**Why TEM only?** IP is a frequency-dependent (or transient) phenomenon. "
+    "Standard VES injects steady DC current and records a static voltage ratio, "
+    "so it only senses the real ohmic resistivity — there is no time window after "
+    "current cutoff to capture a polarisation transient. TEM is sensitive to IP "
+    "precisely because the measurement *is* the transient decay: a polarisable "
+    "layer stores energy during the current-on phase and releases it after switch-off, "
+    "which can reverse the sign of the late-time dB/dt. "
+    "Measuring IP with a DC survey requires a separate acquisition mode "
+    "(time-domain IP / TDIP) that records the voltage decay after cutoff — "
+    "this is not part of a standard VES survey.",
+    icon="ℹ️",
 )
 
 with st.expander(":green[**Check your understanding — quiz**]"):

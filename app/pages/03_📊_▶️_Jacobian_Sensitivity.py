@@ -76,7 +76,6 @@ def _ves_jac(ab2_t, rho_t, h_t, filt):
 
 
 # -- Page ----------------------------------------------------------------------
-st.title("Jacobian & Sensitivity")
 st.header(":violet[Which data points are sensitive to which layers?]")
 
 st.markdown(

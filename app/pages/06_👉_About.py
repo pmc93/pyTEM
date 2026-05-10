@@ -1,0 +1,73 @@
+﻿import streamlit as st
+
+st.title("👉 About")
+st.header(":blue[Background, references, and acknowledgements]")
+
+st.subheader(":blue-background[pyTEM]", divider="blue")
+st.markdown(
+    """
+    This app is built on top of **pyTEM**, an open-source Python package for
+    1-D layered-earth Time-Domain Electromagnetic (TEM) forward modelling and inversion.
+    pyTEM is available on GitHub: [github.com/TODO/pyTEM](https://github.com/TODO/pyTEM).
+
+    The core of pyTEM implements:
+    - 1-D forward modelling via Wait's upward TE recursion and digital linear filter (DLF) transforms
+    - Four loop geometries (circular/square, central/offset) and three compute backends (NumPy, Numba, CuPy)
+    - Regularised Gauss-Newton inversion with an analytical Jacobian
+    - Instrument system filters, transmitter waveform convolution, and IP models (Pelton, Cole-Cole, MPA)
+    """
+)
+
+st.subheader(":blue-background[VES module]", divider="blue")
+st.markdown(
+    """
+    The VES (vertical electrical sounding) functionality is bundled within the pyTEM repository
+    as a self-contained subpackage (`ves/`). It is based on the
+    [PyVES library](https://github.com/asidosaputra/PyVES) by Asido Saputra, which implements
+    1-D DC resistivity forward modelling using digital linear filter coefficients
+    (Guptasarma & Singh 1997) and Levenberg-Marquardt inversion.
+    The version included here has been adapted and extended to integrate with the pyTEM
+    modelling and app framework.
+    """
+)
+
+st.subheader(":blue-background[References]", divider="blue")
+st.markdown(
+    """
+    **TEM forward modelling:**
+    - Wait, J. R. (1954). Mutual electromagnetic coupling of loops over a homogeneous ground.
+      *Geophysics*, 19(2), 290-296.
+    - Key, K. (2009). 1D inversion of multicomponent, multifrequency marine CSEM data.
+      *Geophysics*, 74(2), F9-F20.
+    - Ward, S. H., & Hohmann, G. W. (1988). Electromagnetic theory for geophysical applications.
+      In M. N. Nabighian (ed.), *Electromagnetic Methods in Applied Geophysics*, Vol. 1. SEG.
+
+    **Inversion:**
+    - Constable, S. C., Parker, R. L., & Constable, C. G. (1987). Occam's inversion:
+      A practical algorithm for generating smooth models from electromagnetic sounding data.
+      *Geophysics*, 52(3), 289-300.
+
+    **VES forward modelling:**
+    - Guptasarma, D., & Singh, B. (1997). New digital linear filters for Hankel J0 and J1 transforms.
+      *Geophysical Prospecting*, 45(5), 745-762.
+
+    **IP models:**
+    - Pelton, W. H., Ward, S. H., Hallof, P. G., Sill, W. R., & Nelson, P. H. (1978).
+      Mineral discrimination and removal of inductive coupling with multifrequency IP.
+      *Geophysics*, 43(3), 588-609.
+    - Cole, K. S., & Cole, R. H. (1941). Dispersion and absorption in dielectrics.
+      *Journal of Chemical Physics*, 9(4), 341-351.
+    """
+)
+
+st.subheader(":blue-background[Acknowledgements]", divider="blue")
+st.markdown(
+    """
+    This module was developed at the **Technical University of Denmark (DTU)**.
+    The app structure is inspired by the [Groundwater Project](https://gw-project.org)
+    interactive learning modules.
+    """
+)
+
+st.divider()
+st.caption("TEM vs VES | Built with Streamlit | DTU")
