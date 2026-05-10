@@ -261,7 +261,6 @@ if run_btn or "joint_inv_result" in st.session_state:
 
     # TEM data fit
     ax = ax_tem_data
-    ax.loglog(times * 1e3, dbdt_fwd,  "g--", lw=2,   label="True", zorder=2)
     ax.loglog(times * 1e3, dbdt_pred, "r-",  lw=1.5, label="Predicted", zorder=3)
     ax.loglog(times * 1e3, dbdt_obs,  "ko",  ms=4,   label="Observed (noisy)", zorder=4)
     ax.set_xlabel("Time (ms)")
@@ -272,14 +271,13 @@ if run_btn or "joint_inv_result" in st.session_state:
 
     # VES data fit
     ax = ax_ves_data
-    _rho_all = np.concatenate([rhoap_obs, rhoap_true, rhoap_pred])
+    _rho_all = np.concatenate([rhoap_obs, rhoap_pred])
     _span = np.log10(_rho_all.max()) - np.log10(_rho_all.min())
     _ctr  = (np.log10(_rho_all.max()) + np.log10(_rho_all.min())) / 2
     if _span < 2.5:
         _rlo, _rhi = 10 ** (_ctr - 1.25), 10 ** (_ctr + 1.25)
     else:
         _rlo, _rhi = _rho_all.min() * 0.8, _rho_all.max() * 1.25
-    ax.loglog(ab2, rhoap_true, "g--", lw=2,   label="True", zorder=2)
     ax.loglog(ab2, rhoap_pred, "b-",  lw=1.5, label="Predicted", zorder=3)
     ax.loglog(ab2, rhoap_obs,  "ko",  ms=4,   label="Observed (noisy)", zorder=4)
     ax.set_ylim(_rlo, _rhi)
