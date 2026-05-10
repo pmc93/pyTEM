@@ -1,0 +1,6 @@
+streamlit>=1.44
+numpy
+matplotlib
+pandas
+numba
+scipy
