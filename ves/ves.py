@@ -437,11 +437,15 @@ def invert(ab2, rhoap_obs, resistivities, thicknesses,
         rms_norm = rms / noise_frac
         rms_history.append(rms)
 
+        print(f"Iteration {_iter + 1:>3d}:  RMS = {rms_norm:.2f}")
+
         # Stop when normalised RMS reaches 1 (fit at noise level)
         if rms_norm <= _stop_norm:
+            print("  RMS <= 1 - converged.")
             break
         # Stop if improvement is negligible (< 0.5 % relative)
         if _iter > 0 and (_prev_rms - rms) / max(_prev_rms, 1e-12) < 0.005:
+            print("  No improvement found - stopping.")
             break
         _prev_rms = rms
 
@@ -453,6 +457,7 @@ def invert(ab2, rhoap_obs, resistivities, thicknesses,
         # Initialise alpha_start from ||J^T r||_inf (same as pytem)
         if _alpha_start is None:
             _alpha_start = float(np.linalg.norm(J_log_rho.T @ res_log, np.inf) + 1e-30)
+            print(f"Alpha start = {_alpha_start:.3f}")
 
         if _auto_reg:
             delta = _ves_alpha_search(

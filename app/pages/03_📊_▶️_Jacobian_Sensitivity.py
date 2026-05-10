@@ -131,7 +131,7 @@ fig_tem, axes_tem = plt.subplots(1, 3, figsize=(13, 4))
 fig_tem.subplots_adjust(wspace=0.4)
 
 ax = axes_tem[0]
-ax.loglog(times * 1e3, dbdt, "o-", color="mediumpurple", ms=5, lw=1.5)
+ax.loglog(times * 1e3, dbdt, "o-", color="steelblue", ms=5, lw=1.5)
 ax.set_xlabel("Time (ms)")
 ax.set_ylabel(r"$|\partial B_z/\partial t|$ (A/m$^2$)")
 ax.set_title("TEM - decay curve")
@@ -151,7 +151,7 @@ ax.set_title("TEM Jacobian")
 plt.colorbar(im, ax=ax)
 
 ax = axes_tem[2]
-ax.bar(layer_lbls, np.linalg.norm(J_tem, axis=0), color="mediumpurple", alpha=0.8)
+ax.bar(layer_lbls, np.linalg.norm(J_tem, axis=0), color="steelblue", alpha=0.8)
 ax.set_ylabel("Column norm")
 ax.set_title("TEM - sensitivity per layer")
 ax.grid(axis="y", ls="--", alpha=0.4)

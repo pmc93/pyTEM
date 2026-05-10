@@ -16,14 +16,15 @@ st.markdown(
     aquifer materials across a site.
 
     The key physical property linking geophysics to groundwater is **electrical resistivity**.
-    Resistivity varies with lithology and, to some extent, water quality: saturated sands and
+    Resistivity varies with lithology and, to some extent, water quality. Saturated sands and
     gravels are moderately conductive, clay-rich layers are highly conductive, basement rock
     is resistive, and saline water dramatically lowers resistivity. By mapping resistivity
     with depth, we can identify potential aquifer horizons, estimate depths to the water table,
     and detect saline intrusion; all without a single drill hole. 
     
-    Two methods that  are sensitive to subsurface resistivity are **TEM** (transient electromagnetic) and **VES** (vertical electrical sounding):
-    both map the subsurface resistivity structure, but they work in fundamentally different ways.
+    Two methods that  are sensitive to subsurface resistivity are the **TEM** (transient electromagnetic) 
+    and **VES** (vertical electrical sounding) methods: both map the subsurface resistivity structure, 
+    but they work in fundamentally different ways.
     """
 )
 

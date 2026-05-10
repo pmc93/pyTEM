@@ -29,53 +29,13 @@ from ves import forward as ves_forward, invert as ves_invert, jacobian as ves_ja
 st.header(":red[Recover a resistivity model from noisy data]")
 
 st.markdown(
-    r"""
+    """
     This page runs a **synthetic inversion**: generate noisy data from a known
     **true model**, start from an **initial model**, and let the algorithm
-    iterate until it converges.
-
-    **The objective function** minimised at each iteration is:
-
-$$\phi(\mathbf{m}) = \left\|\mathbf{W}\!\left(\mathbf{d}_{obs} - \mathbf{d}_{pred}(\mathbf{m})\right)\right\|^2 + \alpha\,\mathbf{m}^T\!\mathbf{R}\,\mathbf{m}$$
-
-    where $\mathbf{W}$ is a noise-weighting matrix, $\mathbf{R}$ is a roughness
-    regularisation matrix, and $\alpha$ is the regularisation parameter.
+    iterate until it converges. The inversion minimises a weighted data misfit
+    plus a smoothness regularisation term to find a plausible model that explains the data.
     """
 )
-
-with st.expander(":green[Check your understanding -- quiz]"):
-    col1, col2 = st.columns(2)
-    with col1:
-        q1 = st.radio(
-            ":red[**What does RMS = 1 mean in an inversion?**]",
-            [
-                "The model perfectly fits the data",
-                "The data fit is consistent with the assumed noise level",
-                "The regularisation is too strong",
-                "The inversion has not converged",
-            ],
-            index=None,
-        )
-        if q1 == "The data fit is consistent with the assumed noise level":
-            st.success("Correct! RMS = 1 means the residuals are on average equal to one standard deviation -- a statistically ideal fit.")
-        elif q1 is not None:
-            st.error("RMS = 1 is the target: the model fits the data to within the assumed noise, no more, no less.")
-    with col2:
-        q2 = st.radio(
-            ":red[**What happens if the regularisation parameter is too large?**]",
-            [
-                "The model is too rough (overfits noise)",
-                "The model is too smooth (underfits data)",
-                "The algorithm diverges",
-                "The computation becomes faster",
-            ],
-            index=None,
-        )
-        if q2 == "The model is too smooth (underfits data)":
-            st.success("Correct! Large regularisation penalises model roughness so strongly that real structure is smoothed out.")
-        elif q2 is not None:
-            st.error("Large regularisation forces the model to be very smooth, even if the data demand more structure.")
-
 
 # -- Shared staircase helper ---------------------------------------------------
 def _stair(thick, rho, extra=200.0):
@@ -93,7 +53,7 @@ def _stair(thick, rho, extra=200.0):
 # Invalidate any stale cached results when the page version changes
 _PAGE_VERSION = "v8"
 if st.session_state.get("_inv_page_version") != _PAGE_VERSION:
-    for _k in ("tem_inv_result", "ves_inv_result", "joint_inv_result"):
+    for _k in ("tem_inv_result", "ves_inv_result", "inv_result"):
         st.session_state.pop(_k, None)
     st.cache_data.clear()
     st.session_state["_inv_page_version"] = _PAGE_VERSION
@@ -136,9 +96,9 @@ col_true, col_inv_s = st.columns([3, 1])
 with col_true:
     st.caption('Last row is the half-space - leave its Thickness cell empty.')
     _default_true = pd.DataFrame({
-        'Thickness (m)':       [10.0, 40.0, None],
-        'Resistivity (Ohm.m)': [100.0, 10.0, 200.0],
-    })
+            'Thickness (m)':       [10.0, 40.0, None],
+            'Resistivity (Ohm.m)': [100.0, 10.0, 200.0],
+        })
     _edited_true = st.data_editor(
         _default_true,
         column_config={
@@ -223,9 +183,9 @@ def _run_inv(true_thick_t, true_rho_t,
         thick_ves, res_ves["resistivities"], res_ves["rms_history"],
     )
 
-run_btn = st.button("Run both inversions", type="primary", key="inv_run_btn")
+run_btn = st.button("Run inversions", type="primary", key="inv_run_btn")
 
-if run_btn or "joint_inv_result" in st.session_state:
+if run_btn or "inv_result" in st.session_state:
     if run_btn:
         with st.spinner("Running TEM and VES inversions..."):
             _res = _run_inv(
@@ -234,9 +194,9 @@ if run_btn or "joint_inv_result" in st.session_state:
                 tuple(ab2), noise_ves_pct / 100.0,
                 start_rho,
             )
-        st.session_state["joint_inv_result"] = _res
+        st.session_state["inv_result"] = _res
     else:
-        _res = st.session_state["joint_inv_result"]
+        _res = st.session_state["inv_result"]
 
     (dbdt_obs, dbdt_fwd, dbdt_pred,
      thick_tem_r, rho_tem_r, rms_tem,
@@ -260,11 +220,10 @@ if run_btn or "joint_inv_result" in st.session_state:
 
     # TEM data fit
     ax = ax_tem_data
-    ax.loglog(times, dbdt_pred, "r-",  lw=1.5, label="Predicted", zorder=3)
-    ax.loglog(times, dbdt_obs,  "ko",  ms=4,   label="Observed (noisy)", zorder=4)
+    ax.loglog(times, dbdt_pred, color="steelblue", linestyle="-", lw=1.5, label="Predicted TEM", zorder=3)
+    ax.loglog(times, dbdt_obs,  color="black", marker="o", linestyle="None", ms=4,   label="Observed TEM", zorder=4)
     ax.set_xlabel("Time [s]")
-    ax.set_ylabel(r"$|\partial B_z/\partial t|$ (A/m$^2$)")
-    ax.set_title("TEM - data fit")
+    ax.set_ylabel(r"|dB/dt| [A/m$^2$]")
     ax.grid(True, which="both", ls="--", alpha=0.4)
     ax.legend(fontsize=8)
 
@@ -277,12 +236,11 @@ if run_btn or "joint_inv_result" in st.session_state:
         _rlo, _rhi = 10 ** (_ctr - 1.25), 10 ** (_ctr + 1.25)
     else:
         _rlo, _rhi = _rho_all.min() * 0.8, _rho_all.max() * 1.25
-    ax.loglog(ab2, rhoap_pred, "b-",  lw=1.5, label="Predicted", zorder=3)
-    ax.loglog(ab2, rhoap_obs,  "ko",  ms=4,   label="Observed (noisy)", zorder=4)
+    ax.loglog(ab2, rhoap_pred, color="darkorange", linestyle="-", lw=1.5, label="Predicted VES", zorder=3)
+    ax.loglog(ab2, rhoap_obs,  color="black", marker="o", linestyle="None", ms=4,   label="Observed VES", zorder=4)
     ax.set_ylim(_rlo, _rhi)
     ax.set_xlabel("AB/2 [m]")
     ax.set_ylabel("Apparent resistivity [Ohm.m]")
-    ax.set_title("VES - data fit")
     ax.grid(True, which="both", ls="--", alpha=0.4)
     ax.legend(fontsize=8)
 
@@ -291,15 +249,21 @@ if run_btn or "joint_inv_result" in st.session_state:
     r_true, d_true = _stair(true_thick, true_rho)
     r_tem,  d_tem  = _stair(list(thick_tem_r), list(rho_tem_r))
     r_ves,  d_ves  = _stair(list(thick_ves_r), list(rho_ves_r))
-    ax.semilogx(r_true, d_true, "g--", lw=2.5, label="True model")
-    ax.semilogx(r_tem,  d_tem,  "r-",  lw=2,   label="TEM recovered")
-    ax.semilogx(r_ves,  d_ves,  "b-",  lw=2,   label="VES recovered")
+    ax.semilogx(r_true, d_true, color="black", linestyle="--", lw=2.5, label="True model")
+    ax.semilogx(r_tem,  d_tem,  color="steelblue", linestyle="-", lw=2,   label="TEM recovered")
+    ax.semilogx(r_ves,  d_ves,  color="darkorange", linestyle="-", lw=2,   label="VES recovered")
     ax.invert_yaxis()
+    _all_r = r_true + r_tem + r_ves
+    _rlo = min(_all_r)
+    _rhi = max(_all_r)
+    _ctr = (np.log10(_rlo) + np.log10(_rhi)) / 2
+    _span = max(np.log10(_rhi) - np.log10(_rlo), 2.5)
+    ax.set_xlim(10 ** (_ctr - _span / 2), 10 ** (_ctr + _span / 2))
     ax.set_xlabel("Resistivity [Ohm.m]")
     ax.set_ylabel("Depth [m]")
-    ax.set_title("Recovered model: TEM and VES")
     ax.grid(True, which="both", ls="--", alpha=0.4)
     ax.legend(fontsize=8)
+    fig.tight_layout()
 
     st.pyplot(fig)
     plt.close(fig)

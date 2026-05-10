@@ -101,7 +101,7 @@ with col_m:
     st.markdown("**Background model**: last row is the half-space, leave its Thickness empty")
     _default_ip = pd.DataFrame({
         "Thickness (m)": [30.0, 60.0, None],
-        "Resistivity (Ω·m)": [100.0, 50.0, 300.0],
+        "Resistivity (Ohm.m)": [100.0, 50.0, 300.0],
     })
     _edited_ip = st.data_editor(
         _default_ip,
@@ -109,7 +109,7 @@ with col_m:
             "Thickness (m)": st.column_config.NumberColumn(
                 min_value=0.1, max_value=10000.0, format="%.1f",
             ),
-            "Resistivity (Ω·m)": st.column_config.NumberColumn(
+            "Resistivity (Ohm.m)": st.column_config.NumberColumn(
                 min_value=0.01, max_value=1e6, format="%.1f",
             ),
         },
@@ -117,9 +117,9 @@ with col_m:
         use_container_width=True,
         key="ip_model_editor",
     )
-    _valid_ip = _edited_ip.dropna(subset=["Resistivity (Ω·m)"])
+    _valid_ip = _edited_ip.dropna(subset=["Resistivity (Ohm.m)"])
     _ip_thicknesses = _valid_ip["Thickness (m)"].dropna().tolist()
-    _ip_resistivities = _valid_ip["Resistivity (Ω·m)"].tolist()
+    _ip_resistivities = _valid_ip["Resistivity (Ohm.m)"].tolist()
     if len(_ip_resistivities) < 2:
         st.warning("Need at least 2 layers: the IP layer and a half-space.")
         st.stop()
@@ -200,7 +200,7 @@ pos_mask = dbdt_ip_plot > 0
 neg_mask = ~pos_mask
 
 ax1.loglog(times_ip[pos_mask] * 1e3, np.abs(dbdt_ip_plot[pos_mask]),
-           "o", color="darkorange", ms=5, label="With IP (positive)")
+           "o", color="steelblue", ms=5, label="With IP (positive)")
 if neg_mask.any():
     ax1.loglog(times_ip[neg_mask] * 1e3, np.abs(dbdt_ip_plot[neg_mask]),
                "^", color="firebrick", ms=5, label="With IP (sign-reversed!)")
@@ -223,11 +223,11 @@ else:
 
 ax2 = axes[1]
 ax2_twin = ax2.twinx()
-ax2.semilogx(freqs, np.real(rho_complex), "darkorange", lw=2, label=r"Re[$\rho(\omega)$]")
-ax2_twin.semilogx(freqs, -np.angle(rho_complex, deg=True), "steelblue", lw=2,
+ax2.semilogx(freqs, np.real(rho_complex), color="darkorange", lw=2, label=r"Re[$\rho(\omega)$]")
+ax2_twin.semilogx(freqs, -np.angle(rho_complex, deg=True), color="steelblue", lw=2,
                    ls="--", label="Phase (°)")
 ax2.set_xlabel("Frequency (Hz)")
-ax2.set_ylabel(r"Real resistivity ($\Omega\cdot$m)", color="darkorange")
+ax2.set_ylabel("Real resistivity (Ohm.m)", color="darkorange")
 ax2_twin.set_ylabel("Phase angle (°)", color="steelblue")
 ax2.set_title(f"IP layer complex resistivity ({ip_model_type})")
 ax2.grid(True, which="both", ls="--", alpha=0.4)
