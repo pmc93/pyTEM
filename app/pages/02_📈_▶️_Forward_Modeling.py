@@ -3,6 +3,15 @@ import sys
 
 import numpy as np
 import matplotlib.pyplot as plt
+# -- Matplotlib font sizes (mobile-friendly) --------------------------
+plt.rcParams.update({
+    "axes.labelsize":  14,
+    "axes.titlesize":  15,
+    "xtick.labelsize": 12,
+    "ytick.labelsize": 12,
+    "legend.fontsize": 11,
+})
+
 import streamlit as st
 
 # ── Path setup ────────────────────────────────────────────────────────────────
@@ -140,8 +149,7 @@ with tab_ves:
         ab2_min = st.slider("AB/2 minimum (m)", 1, 30, 1, key="fwd_ves_ab2min")
         ab2_max = st.slider("AB/2 maximum (m)", 50, 2000, 300, key="fwd_ves_ab2max")
         n_ab2 = int(st.number_input("AB/2 points", 5, 60, 25, key="fwd_ves_nab2"))
-        filt = st.selectbox("Filter", ["gs7", "gs11", "gs22"], key="fwd_ves_filt",
-                             help="gs7 fast · gs22 most accurate")
+        filt = "gs11"
 
     ab2 = np.logspace(np.log10(ab2_min), np.log10(ab2_max), n_ab2)
 

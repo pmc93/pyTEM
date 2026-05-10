@@ -3,3 +3,6 @@ base = "light"
 
 [server]
 headless = true
+
+[client]
+showSidebarNavigation = true

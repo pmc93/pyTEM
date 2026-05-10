@@ -3,6 +3,15 @@ import sys
 
 import numpy as np
 import matplotlib.pyplot as plt
+# -- Matplotlib font sizes (mobile-friendly) --------------------------
+plt.rcParams.update({
+    "axes.labelsize":  14,
+    "axes.titlesize":  15,
+    "xtick.labelsize": 12,
+    "ytick.labelsize": 12,
+    "legend.fontsize": 11,
+})
+
 import pandas as pd
 import streamlit as st
 
