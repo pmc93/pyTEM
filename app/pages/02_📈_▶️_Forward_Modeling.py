@@ -31,7 +31,7 @@ def _model_ui(prefix, n, def_rho, def_h):
     h_out, r_out = [], []
     hdr = st.columns([2, 3, 4])
     hdr[1].caption("Thickness (m)")
-    hdr[2].caption("Resistivity (Ω·m)")
+    hdr[2].caption("Resistivity (Ohm.m)")
     for i in range(n):
         c = st.columns([2, 3, 4])
         c[0].markdown(f"**{'Layer ' + str(i+1) if i < n-1 else 'Half-space'}**")
@@ -122,10 +122,17 @@ with tab_tem:
         ax1.grid(True, which="both", ls="--", alpha=0.4)
 
         rs, ds = _stair(t_thick, t_rho)
+        _span_m = max(rs) / min(r for r in rs if r > 0)
+        if _span_m < 10**2.5:
+            _ctr_m = (max(rs) * min(r for r in rs if r > 0)) ** 0.5
+            _mlo, _mhi = _ctr_m / 10**1.25, _ctr_m * 10**1.25
+        else:
+            _mlo, _mhi = min(r for r in rs if r > 0) * 0.8, max(rs) * 1.25
         ax2.semilogx(rs, ds, color="steelblue", lw=2)
         ax2.fill_betweenx(ds, rs, alpha=0.15, color="steelblue")
+        ax2.set_xlim(_mlo, _mhi)
         ax2.invert_yaxis()
-        ax2.set_xlabel(r"Resistivity (Ω·m)")
+        ax2.set_xlabel(r"Resistivity (Ohm.m)")
         ax2.set_ylabel("Depth (m)")
         ax2.set_title("Earth model")
         ax2.grid(True, which="both", ls="--", alpha=0.4)
@@ -182,10 +189,17 @@ with tab_ves:
         ax1.grid(True, which="both", ls="--", alpha=0.4)
 
         rs, ds = _stair(v_thick, v_rho)
+        _span_m = max(rs) / min(r for r in rs if r > 0)
+        if _span_m < 10**2.5:
+            _ctr_m = (max(rs) * min(r for r in rs if r > 0)) ** 0.5
+            _mlo, _mhi = _ctr_m / 10**1.25, _ctr_m * 10**1.25
+        else:
+            _mlo, _mhi = min(r for r in rs if r > 0) * 0.8, max(rs) * 1.25
         ax2.semilogx(rs, ds, color="darkorange", lw=2)
         ax2.fill_betweenx(ds, rs, alpha=0.15, color="darkorange")
+        ax2.set_xlim(_mlo, _mhi)
         ax2.invert_yaxis()
-        ax2.set_xlabel(r"Resistivity (Ω·m)")
+        ax2.set_xlabel(r"Resistivity (Ohm.m)")
         ax2.set_ylabel("Depth (m)")
         ax2.set_title("Earth model")
         ax2.grid(True, which="both", ls="--", alpha=0.4)
