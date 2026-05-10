@@ -253,11 +253,11 @@ if run_btn or "joint_inv_result" in st.session_state:
     col_m4.metric("VES iterations", len(rms_ves))
 
     # -- 2Ã—2 results grid: 2 data fits + combined model -------------------------
-    fig = plt.figure(figsize=(14, 10))
-    gs  = fig.add_gridspec(2, 2, hspace=0.38, wspace=0.3)
+    fig = plt.figure(figsize=(14, 13))
+    gs  = fig.add_gridspec(3, 2, hspace=0.42, wspace=0.3)
     ax_tem_data = fig.add_subplot(gs[0, 0])
     ax_ves_data = fig.add_subplot(gs[0, 1])
-    ax_model    = fig.add_subplot(gs[1, :])
+    ax_model    = fig.add_subplot(gs[1:, :])
 
     # TEM data fit
     ax = ax_tem_data
