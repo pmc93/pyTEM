@@ -21,9 +21,9 @@ with col1:
     st.subheader(":blue[🧲 TEM - Transient Electromagnetic Method]")
     st.markdown(
         r"""
-        A large transmitter loop carries a steady current that is abruptly
+        A large transmitter (Tx) loop carries a steady current that is abruptly
         switched off. The collapsing magnetic field induces **eddy currents**
-        that diffuse downward through the earth. A receiver coil records the
+        that diffuse downward through the earth. A receiver (Rx) coil records the
         decaying secondary field dB/dt.
 
         - **Source**: inductive — no ground contact needed
@@ -42,9 +42,9 @@ with col2:
         drives current deeper, sampling greater depth.
 
         - **Source**: galvanic — electrodes must contact the ground
-        - **Depth proxy**: electrode spacing AB/2 — small = shallow, large = deep
+        - **Depth proxy**: AB electrode spacing — small = shallow, large = deep
         - **Best for**: resistive layers and general stratigraphy
-        - **Data**: apparent resistivity curve $\rho_a(AB/2)$
+        - **Data**: apparent resistivity curve $\rho_a$(AB/2)
         """
     )
 
@@ -68,11 +68,11 @@ st.markdown(
     | Property | 🧲 TEM | ⚡️ VES |
     |---|---|---|
     | Source | Inductive loop | Galvanic electrodes |
-    | Depth proxy | Time $t$ | Spacing $AB/2$ |
+    | Depth proxy | Time | AB electrode spacing |
     | Ground contact | Not required | Required |
     | Best sensitivity | Conductive layers | Both — but resistors harder |
     | Key limitation | Noise floor at late times | Equivalence (thin resistors) |
-    | Lateral footprint | ~loop area | ~AB/2 in each direction |
+    | Lateral footprint | Tx loop area | AB electrode spacing |
     | Model output | Resistivity + thickness | Resistivity + thickness |
     """
 )
@@ -86,8 +86,8 @@ st.markdown(
       dB/dt (TEM) and apparent resistivity curve (VES) in real time.
     - 📊 **Jacobian & Sensitivity ▶️** — explore which data points are sensitive to which
       layers; compare TEM and VES sensitivity side by side.
-    - 🎯 **Inversion ▶️** — run a synthetic inversion for TEM (Gauss-Newton) and VES
-      (Levenberg-Marquardt) and inspect how well each recovers the true model.
+    - 🎯 **Inversion ▶️** — run a synthetic inversion for TEM and VES (both Gauss-Newton)
+      and inspect how well each recovers the true model.
     -  **IP Models ▶️** — add induced-polarisation effects (Cole-Cole) to individual
       layers and observe the characteristic sign reversal in the TEM decay.
     - 👉 **About** — references and acknowledgements.

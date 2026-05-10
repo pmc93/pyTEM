@@ -365,8 +365,8 @@ def _ves_alpha_search(ab2, rhoap_obs, J_log, res_log, noise_frac,
 
 
 def invert(ab2, rhoap_obs, resistivities, thicknesses,
-           method="lm", damping="auto", err_min=0.0, iter_max=15,
-           filter_set="gs7", fix_thicknesses=False, regularization="auto",
+           err_min=0.0, iter_max=15,
+           filter_set="gs7", fix_thicknesses=True, regularization="auto",
            noise_frac=0.05, alpha_steps=8, alpha_step=1.0/3.0):
     """
     Invert observed apparent resistivity data using the analytical Jacobian.
@@ -386,15 +386,11 @@ def invert(ab2, rhoap_obs, resistivities, thicknesses,
         Starting resistivities [Ohm.m].
     thicknesses : array_like (N-1,)
         Layer thicknesses [m].
-    method : str (unused, kept for API compatibility)
-    damping : float or 'auto' (unused, kept for API compatibility)
     err_min : float
         Hard stop when normalised RMS falls below this value.
     iter_max : int
         Maximum number of iterations (default 15).
     filter_set : str
-    fix_thicknesses : bool
-        If True only resistivities are updated; thicknesses stay fixed.
     regularization : 'auto' or float
         When 'auto', uses the pytem-style alpha search each iteration.
         When a float, uses that fixed value throughout.
@@ -416,9 +412,6 @@ def invert(ab2, rhoap_obs, resistivities, thicknesses,
         'rms_history'   : list[float]    normalised RMS per iteration
         'n_iter'        : int
     """
-    if method not in ("lm", "svd"):
-        raise ValueError(f"method must be 'lm' or 'svd', got '{method}'.")
-
     ab2       = np.asarray(ab2,           dtype=float)
     rhoap_obs = np.asarray(rhoap_obs,     dtype=float)
     rho       = np.asarray(resistivities, dtype=float).copy()
