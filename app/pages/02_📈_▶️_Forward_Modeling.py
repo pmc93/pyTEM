@@ -89,8 +89,8 @@ with tab_tem:
         tx_r = float(np.sqrt(tx_area / np.pi))
         n_t = int(st.number_input("Time gates", 5, 50, 25, key="fwd_tem_nt"))
     with col_s2:
-        t_min = st.slider("Early time (10^x s)", -6.0, -4.0, -5.0, 0.25, key="fwd_tem_tmin")
-        t_max = st.slider("Late time (10^x s)", -3.0, -1.0, -2.0, 0.25, key="fwd_tem_tmax")
+        t_min = st.slider("log₁₀(Early time [s])", -6.0, -4.0, -5.0, 0.25, key="fwd_tem_tmin")
+        t_max = st.slider("log₁₀(Late time [s])", -3.0, -1.0, -2.0, 0.25, key="fwd_tem_tmax")
 
     st.markdown("**Layer model**")
     n_tem = int(st.number_input("Number of layers", 2, 6, 3, key="fwd_tem_n"))
@@ -171,7 +171,7 @@ with tab_ves:
             _vlo, _vhi = rhoap.min() * 0.8, rhoap.max() * 1.25
         ax1.loglog(ab2, rhoap, "o-", color="darkorange", ms=4, lw=1.5)
         ax1.set_ylim(_vlo, _vhi)
-        ax1.set_xlabel(r"$AB/2$ [m]")
+        ax1.set_xlabel(r"AB/2 [m]")
         ax1.set_ylabel("Apparent resistivity [Ohm.m]")
         ax1.grid(True, which="both", ls="--", alpha=0.4)
 
