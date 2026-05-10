@@ -27,23 +27,18 @@ _RHO = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000]
 
 
 def _model_ui(prefix, n, def_rho, def_h):
-    """Compact slider row per layer. Returns (thicknesses, resistivities)."""
+    """Labelled slider per layer. Returns (thicknesses, resistivities)."""
     h_out, r_out = [], []
-    hdr = st.columns([2, 3, 4])
-    hdr[1].caption("Thickness (m)")
-    hdr[2].caption("Resistivity (Ohm.m)")
     for i in range(n):
-        c = st.columns([2, 3, 4])
-        c[0].markdown(f"**{'Layer ' + str(i+1) if i < n-1 else 'Half-space'}**")
+        label = f"Layer {i+1}" if i < n - 1 else "Half-space"
+        st.markdown(f"**{label}**")
         if i < n - 1:
             h_def = int(def_h[i]) if i < len(def_h) else 20
-            h_out.append(float(c[1].slider(f"Thickness {i+1} (m)", 1, 500, h_def,
-                                            key=f"{prefix}_h{i}",
-                                            label_visibility="collapsed")))
+            h_out.append(float(st.slider(f"Thickness (m)", 1, 500, h_def,
+                                         key=f"{prefix}_h{i}")))
         rho_def = min(_RHO, key=lambda x: abs(x - (def_rho[i] if i < len(def_rho) else 100)))
-        r_out.append(float(c[2].select_slider(f"Resistivity {i+1} (Ohm.m)", _RHO, value=rho_def,
-                                               key=f"{prefix}_r{i}",
-                                               label_visibility="collapsed")))
+        r_out.append(float(st.select_slider(f"Resistivity (Ohm.m)", _RHO, value=rho_def,
+                                            key=f"{prefix}_r{i}")))
     return h_out, r_out
 
 
