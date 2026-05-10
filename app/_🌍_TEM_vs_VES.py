@@ -2,7 +2,7 @@ import streamlit as st
 
 st.set_page_config(
     page_title="TEM vs VES",
-    page_icon="⚡",
+    page_icon="🌍",
 )
 
 st.header(":blue[Two methods for mapping subsurface resistivity]")
@@ -27,9 +27,9 @@ with col1:
         decaying secondary field dB/dt.
 
         - **Source**: inductive — no ground contact needed
-        - **Depth proxy**: time $t$ — early = shallow, late = deep
+        - **Depth proxy**: time — early = shallow, late = deep
         - **Best for**: conductive targets (clay, saline water)
-        - **Data**: dB/dt decay curve (V/m² or T/s)
+        - **Data**: dB/dt decay curve (V/m²)
         """
     )
 
