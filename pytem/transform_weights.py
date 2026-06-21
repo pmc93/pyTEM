@@ -1,5 +1,5 @@
 """
-filters.py — Digital Linear Filter coefficients and Euler acceleration weights.
+filters.py - Digital Linear Filter coefficients and Euler acceleration weights.
 
 Contains:
   - Key (2009) 201-pt and 101-pt Hankel J0/J1 filters

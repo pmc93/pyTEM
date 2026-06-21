@@ -1,11 +1,11 @@
-﻿"""
-inversion.py â€” Inversion utilities for 1-D layered-earth TEM.
+"""
+inversion.py - Inversion utilities for 1-D layered-earth TEM.
 
 Contains:
   - getR               : roughness (smoothness) matrix
-  - getJ               : finite-difference Jacobian
-  - getJ_analytical    : analytical Jacobian (CUDA/Numba/NumPy)
-  - dbdt_to_apprho     : dB/dt â†’ apparent resistivity
+  - getJ_fd            : finite-difference Jacobian
+  - getJ_ana           : analytical Jacobian (CUDA/Numba/NumPy)
+  - dbdt_to_apprho     : dB/dt -> apparent resistivity
   - getRMS, getAlpha, getAlphas : inversion helpers
   - _gn_solve          : Gauss-Newton normal equations solver
   - _backtrack         : step-halving bound enforcement
@@ -99,18 +99,19 @@ def _te_grad_batch(lam, omegas, thick, rho, xp):
 # ============================================================
 # Numba JIT kernels live in kernels_jacobian.py (imported above).
 # The functions imported are:
-#   _te_rte_grad_jit              — single-omega adjoint recursion
-#   _tem_circular_grad_jit/euler  — circle DLF / Euler (with filter_weights)
-#   _tem_square_grad_jit/euler    — square DLF / Euler (with filter_weights)
+#   _te_rte_grad_jit              - single-omega adjoint recursion
+#   _tem_circular_grad_jit/euler  - circle DLF / Euler (with filter_weights)
+#   _tem_square_grad_jit/euler    - square DLF / Euler (with filter_weights)
 # ============================================================
 
-def getJ_ana(thicknesses, log_resistivities, tx_geom, times,
+def getJ_ana(thicknesses, log_resistivities, tx_size, times,
              geometry='circle_central',
-             rx_offset=0.0, rx_y=0.0, n_quad=5, use_symmetry=True,
+             rx_x=0.0, rx_y=0.0, n_quad=5, use_symmetry=True,
              use_numba=True, use_cuda=True,
              system_filter=None,
+             tx_height=0.0, rx_height=0.0,
              transform='dlf', hankel_filter='key_101',
-             fourier_filter='key_101', euler_order=11):
+             fourier_filter='key_81', euler_order=11):
     """Analytical Jacobian  d(ln(-dBdt_i)) / d(ln rho_j)  for all loop geometries.
 
     Uses the adjoint Wait recursion: a single forward+backward pass per
@@ -118,16 +119,16 @@ def getJ_ana(thicknesses, log_resistivities, tx_geom, times,
 
     Transform modes
     ---------------
-    'dlf'   — Digital Linear Filter Fourier transform (default).
-    'euler' — Euler-Stehfest inverse Laplace transform.  All backends
+    'dlf'   - Digital Linear Filter Fourier transform (default).
+    'euler' - Euler-Stehfest inverse Laplace transform.  All backends
               (NumPy / Numba / CUDA) share the same adjoint recursion.
 
     Supported geometries
     --------------------
-    'circle_central'  — Rx at centre of circular Tx loop (default)
-    'circle_offset'   — Rx at radial offset rx_offset from circular Tx
-    'square_central'  — Rx at centre of square Tx loop
-    'square_offset'   — Rx at (rx_offset, rx_y) offset from square Tx centre
+    'circle_central'  - Rx at centre of circular Tx loop (default)
+    'circle_offset'   - Rx at radial offset rx_x from circular Tx
+    'square_central'  - Rx at centre of square Tx loop
+    'square_offset'   - Rx at (rx_x, rx_y) offset from square Tx centre
 
     Backend strategy
     ----------------
@@ -154,20 +155,23 @@ def getJ_ana(thicknesses, log_resistivities, tx_geom, times,
     ----------
     thicknesses       : (N-1,) layer thicknesses [m]
     log_resistivities : (N,)   ln(rho_j)
-    tx_geom           : float  equivalent circle radius [m]
+    tx_size           : float  Tx loop dimension [m]: radius for circle
+                               geometries, side length for square geometries
     times             : (n_t,) gate times [s]
     geometry          : str    loop geometry (default 'circle_central')
-    rx_offset         : float  receiver radial / x-offset [m] (default 0.0)
+    rx_x              : float  receiver radial / x-offset [m] (default 0.0)
     rx_y              : float  receiver y-offset for square_offset [m]
     n_quad            : int    Gauss-Legendre order for square geometries
     use_symmetry      : bool   exploit x<->y symmetry for square_central
     use_numba         : bool   Numba JIT backend (default True)
     use_cuda          : bool   CuPy GPU backend  (default True)
     system_filter     : callable or None  H(omega) -> complex (default None)
+    tx_height         : float  Tx elevation above ground [m] (default 0.0)
+    rx_height         : float  Rx elevation above ground [m] (default 0.0)
     transform         : 'dlf' or 'euler'
     hankel_filter     : str   (default 'key_101')
-    fourier_filter    : str   (default 'key_101') — DLF only
-    euler_order       : int   8, 11, 15, or 19 (default 11) — Euler only
+    fourier_filter    : str   (default 'key_81') - DLF only
+    euler_order       : int   8, 11, 15, or 19 (default 11) - Euler only
 
     Returns
     -------
@@ -178,9 +182,10 @@ def getJ_ana(thicknesses, log_resistivities, tx_geom, times,
     thicknesses   = np.asarray(thicknesses, dtype=float)
     resistivities = np.exp(np.asarray(log_resistivities, dtype=float))
     times         = np.asarray(times, dtype=float)
-    a             = float(tx_geom)
+    a             = float(tx_size)
     n_lay         = len(resistivities)
     n_t           = len(times)
+    altitude      = float(tx_height) + float(rx_height)
 
     h_base, h_j0, h_j1 = HANKEL_FILTERS[hankel_filter]
     _use_euler = (transform == 'euler')
@@ -199,44 +204,44 @@ def getJ_ana(thicknesses, log_resistivities, tx_geom, times,
 
     elif geometry == 'circle_offset':
         lam      = h_base / a
-        j0_vals  = _j0(lam * float(rx_offset))
+        j0_vals  = _j0(lam * float(rx_x))
         lam_kern = lam * j0_vals * h_j1
 
     elif geometry == 'square_central':
-        side  = a * np.sqrt(np.pi)
+        side  = a
         hs    = side / 2.0
         gl_nodes, gl_weights = np.polynomial.legendre.leggauss(n_quad)
         x_pts = hs / 2.0 * (1.0 + gl_nodes)
         w_pts = gl_weights * hs / 2.0
         if use_symmetry:
-            rho_q_l, area_w_l = [], []
+            dist_q_l, area_w_l = [], []
             for _i in range(n_quad):
                 for _jj in range(_i, n_quad):
                     w = w_pts[_i] * w_pts[_jj]
                     if _i != _jj:
                         w *= 2.0
-                    rho_q_l.append(np.sqrt(x_pts[_i]**2 + x_pts[_jj]**2))
+                    dist_q_l.append(np.sqrt(x_pts[_i]**2 + x_pts[_jj]**2))
                     area_w_l.append(w)
-            rho_q  = np.array(rho_q_l)
+            dist_q  = np.array(dist_q_l)
             area_w = np.array(area_w_l)
         else:
             _xx, _yy = np.meshgrid(x_pts, x_pts)
             _wx, _wy = np.meshgrid(w_pts, w_pts)
-            rho_q  = np.sqrt(_xx.ravel()**2 + _yy.ravel()**2)
+            dist_q  = np.sqrt(_xx.ravel()**2 + _yy.ravel()**2)
             area_w = (_wx * _wy).ravel()
         quad_scale = 4.0
 
     elif geometry == 'square_offset':
-        side  = a * np.sqrt(np.pi)
+        side  = a
         hs    = side / 2.0
         gl_nodes, gl_weights = np.polynomial.legendre.leggauss(n_quad)
         x_pts = hs * gl_nodes
         wx    = hs * gl_weights
         _xx, _yy = np.meshgrid(x_pts, x_pts, indexing='xy')
         _wx, _wy = np.meshgrid(wx, wx, indexing='xy')
-        rho_q  = np.sqrt((_xx.ravel() - float(rx_offset))**2 +
+        dist_q  = np.sqrt((_xx.ravel() - float(rx_x))**2 +
                          (_yy.ravel() - float(rx_y))**2)
-        rho_q  = np.maximum(rho_q, 1e-6)
+        dist_q  = np.maximum(dist_q, 1e-6)
         area_w = (_wx * _wy).ravel()
         quad_scale = 1.0
 
@@ -244,6 +249,13 @@ def getJ_ana(thicknesses, log_resistivities, tx_geom, times,
         raise ValueError(
             f"Unknown geometry '{geometry}'. Choose from: "
             "'circle_central', 'circle_offset', 'square_central', 'square_offset'.")
+
+    # Elevated Tx/Rx: in air (sigma=0) the vertical wavenumber equals lam, so an
+    # elevation of (tx_height + rx_height) multiplies each integrand by
+    # exp(-lam * altitude).  This factor is model-independent, so it folds into
+    # the precomputed circular kernel weights identically for the gradient.
+    if _is_circle and altitude != 0.0:
+        lam_kern = lam_kern * np.exp(-lam * altitude)
 
     # ---- Pre-evaluate system filter at all transform frequencies ----
     # When system_filter is None, ones are used (no effect on the integrals).
@@ -265,7 +277,7 @@ def getJ_ana(thicknesses, log_resistivities, tx_geom, times,
     _use_gpu = HAS_CUDA  and use_cuda and not _use_nb
 
     if _use_nb:
-        # Numba path — scalar loops JIT-compiled to SIMD + prange over gates.
+        # Numba path - scalar loops JIT-compiled to SIMD + prange over gates.
         # filter_weights passed as complex128 array; Numba handles arithmetic natively.
         if _use_euler:
             if _is_circle:
@@ -275,8 +287,8 @@ def getJ_ana(thicknesses, log_resistivities, tx_geom, times,
             else:
                 dbdt, J_raw = _tem_square_grad_euler_jit(
                     times, thicknesses, resistivities,
-                    rho_q, area_w, float(quad_scale),
-                    h_base, h_j0, MU0, e_eta, e_A, filter_weights)
+                    dist_q, area_w, float(quad_scale),
+                    h_base, h_j0, MU0, e_eta, e_A, filter_weights, altitude)
         else:
             if _is_circle:
                 dbdt, J_raw = _tem_circular_grad_jit(
@@ -285,11 +297,11 @@ def getJ_ana(thicknesses, log_resistivities, tx_geom, times,
             else:
                 dbdt, J_raw = _tem_square_grad_jit(
                     times, thicknesses, resistivities,
-                    rho_q, area_w, float(quad_scale),
-                    h_base, h_j0, MU0, f_base, f_sin, filter_weights)
+                    dist_q, area_w, float(quad_scale),
+                    h_base, h_j0, MU0, f_base, f_sin, filter_weights, altitude)
 
     elif _use_gpu:
-        # GPU path — full (n_t, n_f, K) tensor batched in one CuPy operation.
+        # GPU path - full (n_t, n_f, K) tensor batched in one CuPy operation.
         # d_filter_weights transferred to GPU; CuPy handles complex128 natively.
         d_h_base         = cp.asarray(h_base)
         d_filter_weights = cp.asarray(filter_weights)
@@ -302,8 +314,8 @@ def getJ_ana(thicknesses, log_resistivities, tx_geom, times,
                 d_h_j0 = cp.asarray(h_j0)
                 dbdt, J_raw = _tem_square_grad_euler_gpu(
                     times, thicknesses, resistivities,
-                    rho_q, area_w, float(quad_scale),
-                    d_h_base, d_h_j0, e_eta, e_A, d_filter_weights)
+                    dist_q, area_w, float(quad_scale),
+                    d_h_base, d_h_j0, e_eta, e_A, d_filter_weights, altitude)
         else:
             d_f_base = cp.asarray(f_base)
             d_f_sin  = cp.asarray(f_sin)
@@ -315,11 +327,11 @@ def getJ_ana(thicknesses, log_resistivities, tx_geom, times,
                 d_h_j0 = cp.asarray(h_j0)
                 dbdt, J_raw = _tem_square_grad_gpu(
                     times, thicknesses, resistivities,
-                    rho_q, area_w, float(quad_scale),
-                    d_h_base, d_h_j0, d_f_base, d_f_sin, d_filter_weights)
+                    dist_q, area_w, float(quad_scale),
+                    d_h_base, d_h_j0, d_f_base, d_f_sin, d_filter_weights, altitude)
 
     else:
-        # NumPy path — all n_f frequencies batched into one _te_grad_batch call
+        # NumPy path - all n_f frequencies batched into one _te_grad_batch call
         # per gate time.  _te_grad_batch(lam, omega_arr, thick, rho, np) returns
         # r_TE (M, K) and dr_TE (N, M, K), keeping inner loops in NumPy's C layer.
         dbdt  = np.zeros(n_t)
@@ -341,10 +353,12 @@ def getJ_ana(thicknesses, log_resistivities, tx_geom, times,
                 else:
                     hz_c  = np.zeros(len(omega_arr), dtype=complex)
                     dhz_c = np.zeros((n_lay, len(omega_arr)), dtype=complex)
-                    for q in range(len(rho_q)):
-                        rq     = rho_q[q];  wq = area_w[q]
+                    for q in range(len(dist_q)):
+                        rq     = dist_q[q];  wq = area_w[q]
                         lam_q  = h_base / rq
                         kern_q = lam_q**2 * h_j0 / (rq * 4.0 * np.pi)
+                        if altitude != 0.0:
+                            kern_q = kern_q * np.exp(-lam_q * altitude)
                         r_q, dr_q = _te_grad_batch(lam_q, omega_arr, thicknesses, resistivities, np)
                         hz_c  += wq * (r_q  * kern_q[None, :]).sum(-1)
                         dhz_c += wq * (dr_q * kern_q[None, None, :]).sum(-1)
@@ -359,7 +373,7 @@ def getJ_ana(thicknesses, log_resistivities, tx_geom, times,
 
         else:
             for i, t in enumerate(times):
-                omega_arr = f_base / t      # (n_f,) — all frequencies at once
+                omega_arr = f_base / t      # (n_f,) - all frequencies at once
                 fw        = filter_weights[i]  # (n_f,) complex
                 if _is_circle:
                     r_TE, dr_TE = _te_grad_batch(lam, omega_arr, thicknesses, resistivities, np)
@@ -369,10 +383,12 @@ def getJ_ana(thicknesses, log_resistivities, tx_geom, times,
                 else:
                     hz_c  = np.zeros(len(omega_arr), dtype=complex)
                     dhz_c = np.zeros((n_lay, len(omega_arr)), dtype=complex)
-                    for q in range(len(rho_q)):
-                        rq     = rho_q[q];  wq = area_w[q]
+                    for q in range(len(dist_q)):
+                        rq     = dist_q[q];  wq = area_w[q]
                         lam_q  = h_base / rq
                         kern_q = lam_q**2 * h_j0 / (rq * 4.0 * np.pi)
+                        if altitude != 0.0:
+                            kern_q = kern_q * np.exp(-lam_q * altitude)
                         r_q, dr_q = _te_grad_batch(lam_q, omega_arr, thicknesses, resistivities, np)
                         hz_c  += wq * (r_q  * kern_q[None, :]).sum(-1)
                         dhz_c += wq * (dr_q * kern_q[None, None, :]).sum(-1)
@@ -410,14 +426,14 @@ def dbdt_to_apprho(obs_data, tx_area, times):
     obs_data : array_like
         Observed dB/dt values [T/s].
     tx_area  : float
-        Transmitter moment (current Ã— area) [AÂ·mÂ²].
+        Transmitter moment (current x area) [A.m^2].
     times    : array_like
         Gate centre times [s].
 
     Returns
     -------
     rho_a : ndarray
-        Apparent resistivity [OhmÂ·m].
+        Apparent resistivity [Ohm.m].
     """
     M = tx_area
     term = (2 * MU0 * M) / (5 * times * obs_data)
@@ -474,21 +490,23 @@ def getR(resistivities, damp=1e-4):
     return R
 
 
-def getJ_fd(thicknesses, log_resistivities, tx_geom, times,
+def getJ_fd(thicknesses, log_resistivities, tx_size, times,
             use_numba=False, use_cuda=True, eps=1e-4, fwd=fwd_circle_central,
-            transform='dlf', hankel_filter='key_201', fourier_filter='key_101',
+            tx_height=0.0, rx_height=0.0,
+            transform='dlf', hankel_filter='key_101', fourier_filter='key_81',
             euler_order=11):
     """Finite-difference Jacobian d(log(-dBdt))/d(ln rho)."""
     fwd_kw = dict(use_numba=use_numba, use_cuda=use_cuda, transform=transform,
+                  tx_height=tx_height, rx_height=rx_height,
                   hankel_filter=hankel_filter, fourier_filter=fourier_filter,
                   euler_order=euler_order)
 
     if fwd is fwd_square_central:
         f0 = -fwd(thicknesses=thicknesses, resistivities=np.exp(log_resistivities),
-                  side_length=tx_geom, times=times, **fwd_kw)
+                  tx_side=tx_size, times=times, **fwd_kw)
     else:
         f0 = -fwd(thicknesses=thicknesses, resistivities=np.exp(log_resistivities),
-                  tx_radius=tx_geom, times=times, **fwd_kw)
+                  tx_radius=tx_size, times=times, **fwd_kw)
 
     bad_f0 = f0 <= 0
     if np.any(bad_f0):
@@ -502,10 +520,10 @@ def getJ_fd(thicknesses, log_resistivities, tx_geom, times,
         perturbed[i] += step
         if fwd is fwd_square_central:
             fi = -fwd(thicknesses=thicknesses, resistivities=np.exp(perturbed),
-                      side_length=tx_geom, times=times, **fwd_kw)
+                      tx_side=tx_size, times=times, **fwd_kw)
         else:
             fi = -fwd(thicknesses=thicknesses, resistivities=np.exp(perturbed),
-                      tx_radius=tx_geom, times=times, **fwd_kw)
+                      tx_radius=tx_size, times=times, **fwd_kw)
 
         valid = (f0 > 0) & (fi > 0)
         if not np.all(valid):
@@ -697,7 +715,7 @@ def _alpha_search(alpha_start, alpha_steps, Jw, dw, R, m,
 # Main inversion function
 # ============================================================
 
-def invert(obs_data, thicknesses, log_resistivities, tx_radius, times,
+def invert(obs_data, thicknesses, log_resistivities, tx_size, times,
            alpha_start=None, alpha_steps=5, alpha_step=1/9, maxit=20, eps=1e-4,
            noise_std=0.02, use_numba=True, use_cuda=True,
            calc_sens=False, store_J=False,
@@ -708,8 +726,8 @@ def invert(obs_data, thicknesses, log_resistivities, tx_radius, times,
            waveform_times=None, waveform_currents=None, n_step=200,
            waveform_n_quad=5,
            geometry='circle_central', n_quad=5,
-           rx_offset=0.0, rx_y=0.0, circle_warmstart=False,
-           rms_target=1.0):
+           rx_x=0.0, rx_y=0.0, tx_height=0.0, rx_height=0.0,
+           circle_warmstart=False):
     """Regularised Gauss-Newton inversion for 1-D layered-earth TEM.
 
     Minimises  phi(m) = ||W (ln d_obs - ln d_pred(m))||^2 + alpha * m^T R m
@@ -723,32 +741,34 @@ def invert(obs_data, thicknesses, log_resistivities, tx_radius, times,
     -------------
     Pass ``system_filter`` (a callable H(omega) -> complex array) to apply a
     frequency-domain instrument response inside the forward model and the
-    analytical Jacobian.  When ``analytical_j=False``, the filter is applied
-    inside ``fwd_circle_central`` automatically; when ``analytical_j=True``,
-    it is passed to ``getJ_analytical``.
+    analytical Jacobian.  When ``analytical_j=False`` the filter is applied
+    inside the geometry's forward function automatically; when
+    ``analytical_j=True`` it is passed to ``getJ_ana``.
 
     Waveform convolution
     --------------------
     When ``waveform_times`` and ``waveform_currents`` are supplied, the step-off
-    response is computed on a dense log-spaced time grid (``n_step`` points)
-    and convolved with the piecewise-linear waveform using
-    ``waveform.convolve_waveform``.  In this mode the Jacobian is always
-    computed by finite differences (``analytical_j`` is ignored), because the
-    linear convolution operator is automatically captured in the FD differences.
+    response is evaluated only at the deduplicated quadrature times produced by
+    ``waveform.setup_waveform`` and combined with the piecewise-linear waveform
+    through a precomputed sparse weight matrix.  Both finite-difference and
+    analytical Jacobians support this mode: because the convolution operator is
+    linear, the analytical path convolves the per-layer gradients with the same
+    weight matrix (chain rule), avoiding N+1 separate convolution passes.
 
     Parameters
     ----------
     obs_data            : (n_t,) observed dBz/dt [T/s], positive values
     thicknesses         : (N,)   layer thicknesses [m]
     log_resistivities   : (N,)   initial ln(rho) [ln(Ohm.m)]
-    tx_radius           : float  equivalent transmitter radius [m]
+    tx_size             : float  Tx loop dimension [m]: radius for circle
+                          geometries, side length for square geometries
     times               : (n_t,) gate centre times [s]
     alpha_start         : float or None  starting regularisation strength
                           (auto-estimated from JTd if None)
     alpha_steps         : int    number of alpha values per outer iteration
     alpha_step          : float  log10 step size between consecutive alpha values
-                          (default 1/9 ≈ 10 steps per decade; increase for
-                          larger jumps, e.g. 1/4 ≈ 4 steps per decade)
+                          (default 1/9 ~ 10 steps per decade; increase for
+                          larger jumps, e.g. 1/4 ~ 4 steps per decade)
     maxit               : int    maximum Gauss-Newton iterations
     eps                 : float  finite-difference step for FD Jacobian
     noise_std           : float or (n_t,)  fractional noise standard deviation
@@ -770,6 +790,8 @@ def invert(obs_data, thicknesses, log_resistivities, tx_radius, times,
     waveform_currents   : array-like or None  current at break points [A]
     n_step              : int    unused (kept for backwards compatibility)
     waveform_n_quad     : int    GL quadrature order for waveform convolution (default 5)
+    tx_height           : float  Tx elevation above ground [m] (default 0.0)
+    rx_height           : float  Rx elevation above ground [m] (default 0.0)
 
     Returns
     -------
@@ -793,13 +815,13 @@ def invert(obs_data, thicknesses, log_resistivities, tx_radius, times,
 
     # ---- Circle warm-start ----
     if circle_warmstart and geometry.startswith('square'):
-        r_circ    = float(tx_radius) / np.sqrt(np.pi)
+        r_circ    = float(tx_size) / np.sqrt(np.pi)
         circ_geom = 'circle_central' if geometry == 'square_central' else 'circle_offset'
         print(f'[circle_warmstart] Running circle pre-inversion '
               f'(geometry={circ_geom}, r={r_circ:.3f} m)...')
         ws = invert(
             obs_data=obs_data, thicknesses=thicknesses,
-            log_resistivities=m, tx_radius=r_circ, times=times,
+            log_resistivities=m, tx_size=r_circ, times=times,
             alpha_start=alpha_start, alpha_steps=alpha_steps, alpha_step=alpha_step,
             maxit=maxit,
             eps=eps, noise_std=noise_std, use_numba=use_numba, use_cuda=use_cuda,
@@ -812,13 +834,14 @@ def invert(obs_data, thicknesses, log_resistivities, tx_radius, times,
             waveform_times=waveform_times, waveform_currents=waveform_currents,
             waveform_n_quad=waveform_n_quad,
             n_step=n_step, geometry=circ_geom, n_quad=1,
-            rx_offset=rx_offset, rx_y=rx_y, circle_warmstart=False,
+            rx_x=rx_x, rx_y=rx_y, tx_height=tx_height,
+            rx_height=rx_height, circle_warmstart=False,
         )
         print(f'[circle_warmstart] Circle converged (RMS={ws["rms_history"][-1]:.3f}). '
               f'Running up to {maxit} square refinement steps...')
         return invert(
             obs_data=obs_data, thicknesses=thicknesses,
-            log_resistivities=ws['log_resistivities'], tx_radius=tx_radius,
+            log_resistivities=ws['log_resistivities'], tx_size=tx_size,
             times=times,
             alpha_start=None, alpha_steps=alpha_steps, alpha_step=alpha_step,
             maxit=maxit, eps=eps,
@@ -832,7 +855,8 @@ def invert(obs_data, thicknesses, log_resistivities, tx_radius, times,
             waveform_times=waveform_times, waveform_currents=waveform_currents,
             waveform_n_quad=waveform_n_quad,
             n_step=n_step, geometry=geometry, n_quad=n_quad,
-            rx_offset=rx_offset, rx_y=rx_y, circle_warmstart=False,
+            rx_x=rx_x, rx_y=rx_y, tx_height=tx_height,
+            rx_height=rx_height, circle_warmstart=False,
         )
 
     ln_rho_min = np.log(float(rho_min))
@@ -865,6 +889,8 @@ def invert(obs_data, thicknesses, log_resistivities, tx_radius, times,
         use_cuda=use_cuda,
         system_filter=system_filter,
         transform=transform,
+        tx_height=tx_height,
+        rx_height=rx_height,
         hankel_filter=hankel_filter,
         fourier_filter=fourier_filter,
         euler_order=euler_order,
@@ -873,16 +899,16 @@ def invert(obs_data, thicknesses, log_resistivities, tx_radius, times,
     # ---- Geometry dispatch helper ----
     def _call_fwd(thick, res, t):
         if geometry == 'circle_central':
-            return -fwd_circle_central(thick, res, float(tx_radius), t, **_fwd_kw)
+            return -fwd_circle_central(thick, res, float(tx_size), t, **_fwd_kw)
         elif geometry == 'circle_offset':
-            return -fwd_circle_offset(thick, res, float(tx_radius),
-                                      float(rx_offset), t, **_fwd_kw)
+            return -fwd_circle_offset(thick, res, float(tx_size),
+                                      float(rx_x), t, **_fwd_kw)
         elif geometry == 'square_central':
-            return -fwd_square_central(thick, res, float(tx_radius), t,
+            return -fwd_square_central(thick, res, float(tx_size), t,
                                        n_quad=n_quad, **_fwd_kw)
         else:  # square_offset
-            return -fwd_square_offset(thick, res, float(tx_radius),
-                                      float(rx_offset), float(rx_y), t,
+            return -fwd_square_offset(thick, res, float(tx_size),
+                                      float(rx_x), float(rx_y), t,
                                       n_quad=n_quad, **_fwd_kw)
 
     # ---- Forward model closure ----
@@ -896,24 +922,22 @@ def invert(obs_data, thicknesses, log_resistivities, tx_radius, times,
     # ---- Jacobian closure ----
     def _build_jacobian(log_rho):
         if analytical_j and not _use_waveform:
-            # Pure analytical Jacobian - no waveform.
-            # getJ_ana always expects tx_geom as a circle radius; for square
-            # geometries it converts to side_length internally via side = a*sqrt(pi).
-            # tx_radius is side_length for square, so convert back to circle radius.
-            _tx_geom_j = (float(tx_radius) / np.sqrt(np.pi)
-                          if geometry.startswith('square') else float(tx_radius))
+            # Pure analytical Jacobian - no waveform.  getJ_ana takes tx_size
+            # directly (radius for circle, side for square), matching invert.
             return getJ_ana(
                 thicknesses=thicknesses,
                 log_resistivities=log_rho,
-                tx_geom=_tx_geom_j,
+                tx_size=float(tx_size),
                 times=times,
                 geometry=geometry,
-                rx_offset=float(rx_offset),
+                rx_x=float(rx_x),
                 rx_y=float(rx_y),
                 n_quad=n_quad,
                 use_numba=use_numba,
                 use_cuda=False,
                 system_filter=system_filter,
+                tx_height=tx_height,
+                rx_height=rx_height,
                 transform=transform,
                 hankel_filter=hankel_filter,
                 fourier_filter=fourier_filter,
@@ -935,20 +959,20 @@ def invert(obs_data, thicknesses, log_resistivities, tx_radius, times,
             # times), not on a dense grid.  This is the empymod pattern.
             res       = np.exp(log_rho)
             step_resp = _call_fwd(thicknesses, res, _wf_comp_times)  # (n_unique,)
-            _tx_geom_j = (float(tx_radius) / np.sqrt(np.pi)
-                          if geometry.startswith('square') else float(tx_radius))
             J_anal = getJ_ana(
                 thicknesses=thicknesses,
                 log_resistivities=log_rho,
-                tx_geom=_tx_geom_j,
+                tx_size=float(tx_size),
                 times=_wf_comp_times,
                 geometry=geometry,
-                rx_offset=float(rx_offset),
+                rx_x=float(rx_x),
                 rx_y=float(rx_y),
                 n_quad=n_quad,
                 use_numba=use_numba,
                 use_cuda=False,
                 system_filter=system_filter,
+                tx_height=tx_height,
+                rx_height=rx_height,
                 transform=transform,
                 hankel_filter=hankel_filter,
                 fourier_filter=fourier_filter,
@@ -977,7 +1001,8 @@ def invert(obs_data, thicknesses, log_resistivities, tx_radius, times,
         return J
 
     # ---- Print average apparent resistivity of observed data ----
-    tx_area = np.pi * float(tx_radius) ** 2
+    tx_area = (np.pi * float(tx_size) ** 2 if geometry.startswith('circle')
+               else float(tx_size) ** 2)
     app_rho_obs = dbdt_to_apprho(obs_data, tx_area, times)
     valid_rho = app_rho_obs[(obs_data > 0) & np.isfinite(app_rho_obs)]
     if valid_rho.size > 0:
@@ -1025,8 +1050,8 @@ def invert(obs_data, thicknesses, log_resistivities, tx_radius, times,
         elapsed = _time_mod.time() - t_loop
         print(f"Iteration {it + 1:>3d}:  RMS = {rms:.2f}")
 
-        if rms <= rms_target:
-            print(f"  RMS <= {rms_target} - converged.")
+        if rms <= 1.0:
+            print("  RMS <= 1 - converged.")
             break
 
         if it > 0:
@@ -1051,7 +1076,7 @@ def invert(obs_data, thicknesses, log_resistivities, tx_radius, times,
         # Select best model update.
         # When any search RMS dipped below 1 (overshoot), _alpha_search appended
         # the parabola-adjusted model as the last entry.  Always prefer that entry
-        # so the update lands as close to RMS = 1 as possible — even if the
+        # so the update lands as close to RMS = 1 as possible - even if the
         # parabola RMS ended up slightly above 1 (which the "below" filter would
         # otherwise reject).
         rms_arr   = np.array(rms_h)

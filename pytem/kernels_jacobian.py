@@ -1,5 +1,5 @@
 """
-kernels_jacobian.py — Numba JIT and CuPy GPU kernels for the analytical Jacobian.
+kernels_jacobian.py - Numba JIT and CuPy GPU kernels for the analytical Jacobian.
 
 Implements the adjoint Wait recursion: a single forward+backward pass per
 (omega, lambda) point yields d(r_TE)/d(ln rho_j) for all N layers at once.
@@ -57,14 +57,14 @@ except ImportError:
 #   2. Large tensors exceed L2 cache for typical problem sizes
 #
 # _te_rte_grad_jit handles both real (DLF) and complex (Euler) omega
-# natively — the same JIT function is called by both DLF and Euler kernels.
+# natively - the same JIT function is called by both DLF and Euler kernels.
 # ============================================================================
 
 if HAS_NUMBA:
 
     @nb.njit(**_NB_OPTS)
     def _te_rte_grad_jit(lam, omega, thicknesses, resistivities, mu0):
-        """Wait recursion + adjoint gradient — single omega, scalar loops (Numba JIT).
+        """Wait recursion + adjoint gradient - single omega, scalar loops (Numba JIT).
 
         Returns r_te (K,) and dr_te (N, K) = d(r_TE)/d(ln rho_j) for all layers.
         Handles both real (DLF) and complex (Euler) omega natively.
@@ -142,7 +142,7 @@ if HAS_NUMBA:
                                filter_weights):
         """Circle dBz/dt + analytical Jacobian (Numba JIT, DLF).
 
-        Works for circle_central and circle_offset — only lam_hj1 differs:
+        Works for circle_central and circle_offset - only lam_hj1 differs:
             circle_central : lam_hj1 = lam * h_j1
             circle_offset  : lam_hj1 = lam * J0(lam * rx_offset) * h_j1
 
@@ -188,21 +188,21 @@ if HAS_NUMBA:
 
     @nb.njit(**_NB_OPTS)
     def _tem_square_grad_jit(times, thicknesses, resistivities,
-                             rho_q, area_w, quad_scale,
+                             dist_q, area_w, quad_scale,
                              h_base, h_j0, mu0,
                              fourier_base, fourier_weights,
-                             filter_weights):
+                             filter_weights, altitude=0.0):
         """Square-loop dBz/dt + analytical Jacobian (Numba JIT, DLF).
 
         Works for square_central (one-quadrant GL with quad_scale=4.0) and
         square_offset (full-square GL with quad_scale=1.0).
 
-        filter_weights : (n_t, n_f) complex128 — see _tem_circular_grad_jit.
+        filter_weights : (n_t, n_f) complex128 - see _tem_circular_grad_jit.
         Returns dbdt (n_t,) and J_raw (n_t, N) before log-log conversion.
         """
         n_t   = len(times)
         n_f   = len(fourier_base)
-        n_q   = len(rho_q)
+        n_q   = len(dist_q)
         n_lam = len(h_base)
         n_lay = len(resistivities)
         _4pi  = 4.0 * np.pi
@@ -222,11 +222,13 @@ if HAS_NUMBA:
                 hz_f  = 0.0 + 0.0j
                 dhz_f = np.zeros(n_lay, dtype=np.complex128)
                 for q in range(n_q):
-                    rq = rho_q[q];  wq = area_w[q]
+                    rq = dist_q[q];  wq = area_w[q]
                     for m in range(n_lam):
                         lm        = h_base[m] / rq
                         lam_q[m]  = lm
                         kern_q[m] = lm * lm * h_j0[m] / (rq * _4pi)
+                        if altitude != 0.0:
+                            kern_q[m] *= np.exp(-lm * altitude)
                     r_te_q, dr_te_q = _te_rte_grad_jit(
                         lam_q, omega, thicknesses, resistivities, mu0)
                     hz_c = 0.0 + 0.0j
@@ -252,10 +254,10 @@ if HAS_NUMBA:
     def _tem_circular_grad_euler_jit(times, thicknesses, resistivities,
                                      lam, lam_hj1, mu0, e_eta, e_A,
                                      filter_weights):
-        """Circle dBz/dt + analytical Jacobian (Numba JIT, Euler–Stehfest).
+        """Circle dBz/dt + analytical Jacobian (Numba JIT, Euler-Stehfest).
 
         Uses complex Bromwich frequencies omega_k = k*pi/t - (A/2t)*i.
-        _te_rte_grad_jit handles complex omega natively — no separate
+        _te_rte_grad_jit handles complex omega natively - no separate
         implementation is needed; the recursion is analytic in omega.
 
         filter_weights : (n_t, n_eval) complex128
@@ -302,17 +304,17 @@ if HAS_NUMBA:
 
     @nb.njit(**_NB_OPTS)
     def _tem_square_grad_euler_jit(times, thicknesses, resistivities,
-                                   rho_q, area_w, quad_scale,
+                                   dist_q, area_w, quad_scale,
                                    h_base, h_j0, mu0, e_eta, e_A,
-                                   filter_weights):
-        """Square-loop dBz/dt + analytical Jacobian (Numba JIT, Euler–Stehfest).
+                                   filter_weights, altitude=0.0):
+        """Square-loop dBz/dt + analytical Jacobian (Numba JIT, Euler-Stehfest).
 
-        filter_weights : (n_t, n_eval) complex128 — see _tem_circular_grad_euler_jit.
+        filter_weights : (n_t, n_eval) complex128 - see _tem_circular_grad_euler_jit.
         Returns dbdt (n_t,) and J_raw (n_t, N) with step-off sign applied.
         """
         n_t    = len(times)
         n_eval = len(e_eta)
-        n_q    = len(rho_q)
+        n_q    = len(dist_q)
         n_lam  = len(h_base)
         n_lay  = len(resistivities)
         _4pi   = 4.0 * np.pi
@@ -335,11 +337,13 @@ if HAS_NUMBA:
                 hz_f  = 0.0 + 0.0j
                 dhz_f = np.zeros(n_lay, dtype=np.complex128)
                 for q in range(n_q):
-                    rq = rho_q[q];  wq = area_w[q]
+                    rq = dist_q[q];  wq = area_w[q]
                     for m in range(n_lam):
                         lm        = h_base[m] / rq
                         lam_q[m]  = lm
                         kern_q[m] = lm * lm * h_j0[m] / (rq * _4pi)
+                        if altitude != 0.0:
+                            kern_q[m] *= np.exp(-lm * altitude)
                     r_te_q, dr_te_q = _te_rte_grad_jit(
                         lam_q, omega, thicknesses, resistivities, mu0)
                     hz_c = 0.0 + 0.0j
@@ -366,7 +370,7 @@ if HAS_NUMBA:
 # CuPy GPU kernels
 # ============================================================================
 #
-# The full (n_t, n_f, K) frequency × wavenumber tensor is processed in a
+# The full (n_t, n_f, K) frequency x wavenumber tensor is processed in a
 # single batched CuPy operation.  CUDA throughput depends on keeping many
 # warps in flight simultaneously; the large (n_t, n_f, K) batch saturates
 # GPU occupancy.  Per-frequency Python loops would serialise kernel launches
@@ -381,12 +385,12 @@ if HAS_CUDA:
     import cupy as cp
 
     def _te_reflection_coeff_grad_gpu(d_lam, omega_2d, d_thicknesses, d_resistivities):
-        """Batched TE gradient on GPU — (n_t, n_f, K) tensor.
+        """Batched TE gradient on GPU - (n_t, n_f, K) tensor.
 
         Parameters
         ----------
         d_lam           : (K,)        cupy float64
-        omega_2d        : (n_t, n_f)  cupy complex128 — real or complex omega
+        omega_2d        : (n_t, n_f)  cupy complex128 - real or complex omega
         d_thicknesses   : (N-1,)      cupy float64
         d_resistivities : (N,)        cupy float64
 
@@ -487,15 +491,15 @@ if HAS_CUDA:
         return cp.asnumpy(dbdt), cp.asnumpy(J_raw)
 
     def _tem_square_grad_gpu(times, thicknesses, resistivities,
-                             rho_q, area_w, quad_scale,
+                             dist_q, area_w, quad_scale,
                              d_h_base, d_h_j0, d_f_base, d_f_sin,
-                             d_filter_weights):
+                             d_filter_weights, altitude=0.0):
         """Square-loop dBz/dt + analytical Jacobian on GPU (DLF).
 
         Loops over n_q quadrature points; each iteration runs the full
         (n_t, n_f, K) adjoint on the GPU then accumulates with area weight.
 
-        d_filter_weights : (n_t, n_f) cupy complex128 — see _tem_circular_grad_gpu.
+        d_filter_weights : (n_t, n_f) cupy complex128 - see _tem_circular_grad_gpu.
         Returns (dbdt, J_raw) as NumPy arrays, shapes (n_t,) and (n_t, N).
         """
         d_times  = cp.asarray(times)
@@ -509,10 +513,12 @@ if HAS_CUDA:
         d_dbdt = cp.zeros(n_t,          dtype=cp.float64)
         d_Jraw = cp.zeros((n_t, n_lay), dtype=cp.float64)
 
-        for q in range(len(rho_q)):
-            rq       = float(rho_q[q]);  wq = float(area_w[q])
+        for q in range(len(dist_q)):
+            rq       = float(dist_q[q]);  wq = float(area_w[q])
             d_lam_q  = d_h_base / rq
             d_kern_q = d_lam_q**2 * d_h_j0 / (rq * _4pi)
+            if altitude != 0.0:
+                d_kern_q = d_kern_q * cp.exp(-d_lam_q * altitude)
 
             r_te, dr_te = _te_reflection_coeff_grad_gpu(
                 d_lam_q, omega_2d, d_thick, d_rho)
@@ -535,10 +541,10 @@ if HAS_CUDA:
     def _tem_circular_grad_euler_gpu(times, thicknesses, resistivities, tx_radius,
                                      lam_hj1, d_h_base, e_eta, e_A,
                                      d_filter_weights):
-        """Circle dBz/dt + analytical Jacobian on GPU (Euler–Stehfest).
+        """Circle dBz/dt + analytical Jacobian on GPU (Euler-Stehfest).
 
         _te_reflection_coeff_grad_gpu handles complex omega_2d natively, so
-        no separate Euler kernel is needed — the same GPU adjoint recursion
+        no separate Euler kernel is needed - the same GPU adjoint recursion
         works for both real (DLF) and complex (Euler) frequencies.
 
         d_filter_weights : (n_t, n_eval) cupy complex128
@@ -579,12 +585,12 @@ if HAS_CUDA:
         return cp.asnumpy(dbdt), cp.asnumpy(J_raw)
 
     def _tem_square_grad_euler_gpu(times, thicknesses, resistivities,
-                                   rho_q, area_w, quad_scale,
+                                   dist_q, area_w, quad_scale,
                                    d_h_base, d_h_j0, e_eta, e_A,
-                                   d_filter_weights):
-        """Square-loop dBz/dt + analytical Jacobian on GPU (Euler–Stehfest).
+                                   d_filter_weights, altitude=0.0):
+        """Square-loop dBz/dt + analytical Jacobian on GPU (Euler-Stehfest).
 
-        d_filter_weights : (n_t, n_eval) cupy complex128 — see _tem_circular_grad_euler_gpu.
+        d_filter_weights : (n_t, n_eval) cupy complex128 - see _tem_circular_grad_euler_gpu.
         Returns (dbdt, J_raw) as NumPy arrays, shapes (n_t,) and (n_t, N).
         """
         d_times  = cp.asarray(times)
@@ -603,10 +609,12 @@ if HAS_CUDA:
         d_hz_acc  = cp.zeros(n_t,          dtype=cp.float64)
         d_dhz_acc = cp.zeros((n_t, n_lay), dtype=cp.float64)
 
-        for q in range(len(rho_q)):
-            rq       = float(rho_q[q]);  wq = float(area_w[q])
+        for q in range(len(dist_q)):
+            rq       = float(dist_q[q]);  wq = float(area_w[q])
             d_lam_q  = d_h_base / rq
             d_kern_q = d_lam_q**2 * d_h_j0 / (rq * _4pi)
+            if altitude != 0.0:
+                d_kern_q = d_kern_q * cp.exp(-d_lam_q * altitude)
 
             r_te, dr_te = _te_reflection_coeff_grad_gpu(d_lam_q, omega_2d, d_thick, d_rho)
             # r_te: (n_t, n_eval, K),  dr_te: (N, n_t, n_eval, K)

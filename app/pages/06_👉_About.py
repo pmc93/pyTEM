@@ -1,4 +1,14 @@
-﻿import streamlit as st
+﻿import os
+import sys
+
+import streamlit as st
+
+# -- Path setup ----------------------------------------------------------------
+_APP_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if _APP_DIR not in sys.path:
+    sys.path.insert(0, _APP_DIR)
+
+from _shared import render_footer
 
 st.title("👉 About")
 st.header(":blue[Background, references, and acknowledgements]")
@@ -70,4 +80,4 @@ st.markdown(
 )
 
 st.divider()
-st.caption("TEM vs VES | Built with Streamlit | DTU")
+render_footer()

@@ -1,5 +1,5 @@
 """
-kernels_gpu.py — CuPy/CUDA GPU kernels for TEM forward modelling.
+kernels_gpu.py - CuPy/CUDA GPU kernels for TEM forward modelling.
 
 Contains:
   - _te_reflection_coeff_gpu  : Wait recursion, batched complex
@@ -44,7 +44,7 @@ if HAS_CUDA:
         return r_TE
 
     # ------------------------------------------------------------------
-    # Fourier DLF GPU — circular (central + offset unified)
+    # Fourier DLF GPU - circular (central + offset unified)
     # ------------------------------------------------------------------
     def _tem_circular_gpu(times, thicknesses, resistivities, tx_radius,
                           extra_weights, d_h_base, d_h_j1, d_f_base, d_f_sin,
@@ -70,17 +70,21 @@ if HAS_CUDA:
         return cp.asnumpy(dbdt)
 
     # ------------------------------------------------------------------
-    # Fourier DLF GPU — square (VMD area integral)
+    # Fourier DLF GPU - square (VMD area integral)
     # ------------------------------------------------------------------
-    def _tem_square_gpu(times, thicknesses, resistivities, offset_dist_q, area_w,
+    def _tem_square_gpu(times, thicknesses, resistivities, dist_q, area_w,
                         d_h_base, d_h_j0, d_f_base, d_f_sin,
-                        filter_weights=None):
-        """Square-loop dBz/dt fully on GPU (Fourier DLF + VMD area integral)."""
-        n_q = len(offset_dist_q)
+                        filter_weights=None, altitude=0.0):
+        """Square-loop dBz/dt fully on GPU (Fourier DLF + VMD area integral).
+
+        altitude : total Tx+Rx elevation [m]; applies an exp(-lam*altitude)
+        upward continuation factor per wavenumber (0.0 = on ground).
+        """
+        n_q = len(dist_q)
         d_times = cp.asarray(times)
         d_thick = cp.asarray(thicknesses, dtype=cp.float64)
         d_rho_lay = cp.asarray(resistivities, dtype=cp.float64)
-        d_offset_dist_q = cp.asarray(offset_dist_q)
+        d_dist_q = cp.asarray(dist_q)
         d_area_w = cp.asarray(area_w)
 
         omega_2d = d_f_base[None, :] / d_times[:, None]
@@ -88,11 +92,13 @@ if HAS_CUDA:
         hz_total = cp.zeros((len(times), n_f), dtype=cp.complex128)
 
         for q in range(n_q):
-            dist = d_offset_dist_q[q]
+            dist = d_dist_q[q]
             d_lam = d_h_base / dist
             r_te = _te_reflection_coeff_gpu(d_lam, omega_2d, d_thick, d_rho_lay)
 
             kernel = r_te * (d_lam ** 2)[None, None, :]
+            if altitude != 0.0:
+                kernel = kernel * cp.exp(-d_lam * altitude)[None, None, :]
             g = cp.sum(kernel * d_h_j0[None, None, :], axis=2) / dist / (4.0 * cp.pi)
             hz_total += float(d_area_w[q]) * g
 
@@ -104,7 +110,7 @@ if HAS_CUDA:
         return cp.asnumpy(dbdt)
 
     # ------------------------------------------------------------------
-    # Euler GPU — circular (central + offset unified)
+    # Euler GPU - circular (central + offset unified)
     # ------------------------------------------------------------------
     def _tem_circular_euler_gpu(times, thicknesses, resistivities, tx_radius,
                                 extra_weights, d_h_base, d_h_j1,
@@ -141,13 +147,17 @@ if HAS_CUDA:
         return cp.asnumpy(dbdt)
 
     # ------------------------------------------------------------------
-    # Euler GPU — square (VMD area integral)
+    # Euler GPU - square (VMD area integral)
     # ------------------------------------------------------------------
-    def _tem_square_euler_gpu(times, thicknesses, resistivities, offset_dist_q, area_w,
+    def _tem_square_euler_gpu(times, thicknesses, resistivities, dist_q, area_w,
                               d_h_base, d_h_j0,
-                              euler_eta, euler_A, filter_weights=None):
-        """Square-loop dBz/dt on GPU via Euler-accelerated Bromwich + VMD integral."""
-        n_q = len(offset_dist_q)
+                              euler_eta, euler_A, filter_weights=None, altitude=0.0):
+        """Square-loop dBz/dt on GPU via Euler-accelerated Bromwich + VMD integral.
+
+        altitude : total Tx+Rx elevation [m]; applies an exp(-lam*altitude)
+        upward continuation factor per wavenumber (0.0 = on ground).
+        """
+        n_q = len(dist_q)
         d_times = cp.asarray(times)
         d_thick = cp.asarray(thicknesses, dtype=cp.float64)
         d_rho_lay = cp.asarray(resistivities, dtype=cp.float64)
@@ -165,10 +175,12 @@ if HAS_CUDA:
         hz_total = cp.zeros((n_t, n_euler), dtype=cp.complex128)
 
         for q in range(n_q):
-            dist = float(offset_dist_q[q])
+            dist = float(dist_q[q])
             d_lam = d_h_base / dist
             r_te = _te_reflection_coeff_gpu(d_lam, omega_2d, d_thick, d_rho_lay)
             kernel = r_te * (d_lam ** 2)[None, None, :]
+            if altitude != 0.0:
+                kernel = kernel * cp.exp(-d_lam * altitude)[None, None, :]
             g = cp.sum(kernel * d_h_j0[None, None, :], axis=2) / dist / (4.0 * cp.pi)
             hz_total += float(area_w[q]) * g
 

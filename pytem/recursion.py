@@ -1,5 +1,5 @@
 """
-recursion.py — TE reflection coefficient via Wait recursion (NumPy).
+recursion.py - TE reflection coefficient via Wait recursion (NumPy).
 """
 
 import numpy as np
@@ -20,7 +20,7 @@ def te_reflection_coeff(lam, omega, thicknesses, resistivities):
 
     Returns
     -------
-    r_TE : (K,) complex128 — TE surface reflection coefficient
+    r_TE : (K,) complex128 - TE surface reflection coefficient
     """
     n_lay = len(resistivities)
     sval = 1j * omega
@@ -55,8 +55,8 @@ def te_reflection_coeff_grad(lam, omega, thicknesses, resistivities):
 
     Returns
     -------
-    r_TE     : (K,)    complex128 — TE surface reflection coefficient
-    dr_TE    : (N, K)  complex128 — d(r_TE) / d(ln rho_j)
+    r_TE     : (K,)    complex128 - TE surface reflection coefficient
+    dr_TE    : (N, K)  complex128 - d(r_TE) / d(ln rho_j)
     """
     n_lay = len(resistivities)
     K = len(lam)
@@ -102,55 +102,12 @@ def te_reflection_coeff_grad(lam, omega, thicknesses, resistivities):
     dpsi_air_dG0 = -2.0 * lam / (lam + Gamma[0]) ** 2
     dr_TE_dpsi_air = (1.0 - r_store[0] ** 2) / denom_air ** 2
 
-    dr_TE_all = np.zeros((n_lay, K), dtype=complex)
-
-    # For each layer j, we need dr_0/dr_j and dr_j/d(ln rho_j)
-    # We propagate dr_0/dr_j backwards: dr_0/dr_{j} = dr_0/dr_{j-1} * dr_{j-1}/dr_j
-
-    # Start: sensitivity of r_TE to r_0 (already computed as dr_TE_dr0)
-    # Then for each j from 0 upward, compute local derivatives
-
-    for j in range(n_lay - 1):
-        # r_j = exp_j * (r_{j+1} + psi_j) / (1 + r_{j+1} * psi_j)
-        # where psi_j = (Gamma_j - Gamma_{j+1}) / (Gamma_j + Gamma_{j+1})
-
-        r_below = r_store[j + 1] if j + 1 < n_lay else np.zeros(K, dtype=complex)
-        exp_j = exp_store[j]
-        psi_j = (Gamma[j] - Gamma[j + 1]) / (Gamma[j] + Gamma[j + 1])
-        numer = r_below + psi_j
-        denom = 1.0 + r_below * psi_j
-
-        # dpsi_j / dGamma_j
-        dpsi_dGj = 2.0 * Gamma[j + 1] / (Gamma[j] + Gamma[j + 1]) ** 2
-        # dpsi_j / dGamma_{j+1}
-        dpsi_dGjp1 = -2.0 * Gamma[j] / (Gamma[j] + Gamma[j + 1]) ** 2
-
-        # dr_j/dpsi_j
-        dr_dpsi = exp_j * (1.0 - r_below ** 2) / denom ** 2
-
-        # dr_j/dGamma_j (through exp and psi)
-        dexp_dGj = -2.0 * thicknesses[j] * exp_j
-        dr_dGj = dexp_dGj * numer / denom + dr_dpsi * dpsi_dGj
-
-        # dr_j/dGamma_{j+1} (through psi only)
-        dr_dGjp1 = dr_dpsi * dpsi_dGjp1
-
-        # dr_j/dr_{j+1}
-        dr_drbelow = exp_j * (1.0 - psi_j ** 2) / denom ** 2
-
-        # Now accumulate: we need d(r_TE)/d(ln rho_j)
-        # For layer j: Gamma_j depends on rho_j
-        #   d(r_TE)/d(ln rho_j) += chain_to_r_j * dr_j/dGamma_j * dGamma_j/d(ln rho_j)
-        #                        (and also through Gamma_j's effect on r_{j-1}, etc.)
-
-        # We'll use a different strategy: propagate adjoint from r_TE backward.
-
-    # --- Cleaner adjoint approach ---
-    # Let adj[j] = dr_TE / dr_j  (adjoint sensitivity of r_TE to the recursion variable at layer j)
-    # adj[0] = dr_TE/dr_0  (from air interface)
-    # For j >= 0: adj[j+1] = adj[j] * dr_j/dr_{j+1}
-    # And the contribution to ln(rho_j) comes from Gamma_j appearing in layers j and j-1.
-
+    # Adjoint backward pass.
+    # Let adj[j] = dr_TE / dr_j be the sensitivity of the surface reflection
+    # coefficient to the recursion variable at layer j.  Seed adj[0] from the
+    # air interface, then propagate downward with adj[j+1] = adj[j] * dr_j/dr_{j+1}.
+    # The contribution to ln(rho_j) enters through Gamma_j, which appears in the
+    # reflection at both layer j and layer j-1.
     dr_TE_all = np.zeros((n_lay, K), dtype=complex)
 
     adj = dr_TE_dr0.copy()  # dr_TE / dr_0

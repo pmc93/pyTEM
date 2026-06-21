@@ -1,5 +1,5 @@
 """
-plotting.py — Plotting utilities for TEM forward modelling and inversion.
+plotting.py - Plotting utilities for TEM forward modelling and inversion.
 """
 
 import numpy as np
@@ -7,12 +7,12 @@ import matplotlib.pyplot as plt
 
 
 def plot_sounding(times, *curves, ax=None, figsize=(6, 4), labels=None,
-                 styles=None, title='Sounding', ylabel=r'$-dB_z/dt$ [V/m²]'):
+                 styles=None, title='Sounding', ylabel=r'$-dB_z/dt$ [V/m^2]'):
     """Plot one or more dB/dt sounding curves on a log-log axis.
 
     Parameters
     ----------
-    times   : (n_t,) array — gate times [s].
+    times   : (n_t,) array - gate times [s].
     *curves : one or more (n_t,) arrays of -dB/dt values.
     ax      : existing Axes, or None to create a new figure.
     figsize : figure size when ax is None.
@@ -45,7 +45,7 @@ def plot_model(thicknesses, resistivities, ax=None, figsize=(4, 4),
     Parameters
     ----------
     thicknesses   : (N-1,) layer thicknesses [m].
-    resistivities : (N,) layer resistivities [Ohm·m].
+    resistivities : (N,) layer resistivities [Ohm.m].
     ax            : existing Axes, or None to create a new figure.
     figsize       : figure size when ax is None.
     depth_pad     : extra depth below last interface [m].
@@ -62,7 +62,7 @@ def plot_model(thicknesses, resistivities, ax=None, figsize=(4, 4),
     ax.step(x, y, where='pre', label=label, color=color, linestyle=linestyle)
     ax.invert_yaxis()
     ax.set_xscale('log')
-    ax.set_xlabel('Resistivity [Ohm·m]')
+    ax.set_xlabel('Resistivity [Ohm.m]')
     ax.set_ylabel('Depth [m]')
     ax.set_title(title)
     if xlim is not None:
@@ -110,7 +110,7 @@ def plot_inversion(times, obs_data, mod_data, thicknesses,
                         np.abs(obs_data) + obs_noise,
                         alpha=0.2, color='C0')
     ax.set_xlabel('Time [s]')
-    ax.set_ylabel(r'$-dB_z/dt$ [V/m²]')
+    ax.set_ylabel(r'$-dB_z/dt$ [V/m^2]')
     ax.set_title('Sounding')
     ax.legend()
 
@@ -147,7 +147,7 @@ def plot_inversion(times, obs_data, mod_data, thicknesses,
 
     ax.invert_yaxis()
     ax.set_xscale('log')
-    ax.set_xlabel('Resistivity [Ohm·m]')
+    ax.set_xlabel('Resistivity [Ohm.m]')
     ax.set_ylabel('Depth [m]')
     ax.set_title('Model')
     if xlim_rho is not None:

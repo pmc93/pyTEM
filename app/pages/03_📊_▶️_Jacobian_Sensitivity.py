@@ -5,11 +5,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 # -- Matplotlib font sizes (mobile-friendly) --------------------------
 plt.rcParams.update({
-    "axes.labelsize":  14,
-    "axes.titlesize":  15,
-    "xtick.labelsize": 12,
-    "ytick.labelsize": 12,
-    "legend.fontsize": 11,
+    "font.size":       16,
+    "axes.labelsize":  18,
+    "axes.titlesize":  18,
+    "xtick.labelsize": 16,
+    "ytick.labelsize": 16,
+    "legend.fontsize": 16,
 })
 
 import streamlit as st
@@ -19,8 +20,13 @@ _ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
+_APP_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if _APP_DIR not in sys.path:
+    sys.path.insert(0, _APP_DIR)
+
 from pytem import fwd_circle_central, getJ_ana
 from ves import forward as ves_forward, jacobian as ves_jacobian
+from _shared import render_footer
 
 # -- Constants -----------------------------------------------------------------
 _N_DATA = 20          # fixed number of data points for both methods
@@ -100,8 +106,8 @@ with st.expander("TEM & VES survey settings", expanded=False):
     col_tem_s, col_ves_s = st.columns(2)
     with col_tem_s:
         st.markdown("**TEM**")
-        tx_area = st.number_input("Tx loop area (m²)", min_value=100, max_value=500000, value=1600, step=100, key="jac_tem_area")
-        tx_r    = float(np.sqrt(tx_area / np.pi))
+        tx_side = st.number_input("Tx loop side length (m)", min_value=5, max_value=500, value=40, step=5, key="jac_tem_side")
+        tx_r    = float(np.sqrt(tx_side ** 2 / np.pi))
         t_min = st.slider("Earliest gate (10^x s)", -6.0, -4.0, -5.0, 0.25, key="jac_tem_tmin")
         t_max = st.slider("Latest gate (10^x s)",   -3.0, -1.0, -2.0, 0.25, key="jac_tem_tmax")
         filt_tem = "key_101"
@@ -133,7 +139,7 @@ fig_tem.subplots_adjust(wspace=0.4)
 ax = axes_tem[0]
 ax.loglog(times * 1e3, dbdt, "o-", color="steelblue", ms=5, lw=1.5)
 ax.set_xlabel("Time (ms)")
-ax.set_ylabel(r"$|\partial B_z/\partial t|$ (A/m$^2$)")
+ax.set_ylabel(r"$|\partial B_z/\partial t|$ (V/m$^2$)")
 ax.set_title("TEM - decay curve")
 ax.grid(True, which="both", ls="--", alpha=0.4)
 
@@ -141,10 +147,10 @@ ax = axes_tem[1]
 vmax = max(np.abs(J_tem).max(), 1e-9)
 im = ax.imshow(J_tem, aspect="auto", cmap="RdBu_r", vmin=-vmax, vmax=vmax)
 ax.set_xticks(range(N))
-ax.set_xticklabels(layer_lbls, fontsize=10)
+ax.set_xticklabels(layer_lbls)
 t_ticks = list(range(0, _N_DATA, max(1, _N_DATA // 5)))
 ax.set_yticks(t_ticks)
-ax.set_yticklabels([f"{times[k]*1e3:.2f} ms" for k in t_ticks], fontsize=10)
+ax.set_yticklabels([f"{times[k]*1e3:.2f} ms" for k in t_ticks])
 ax.set_xlabel("Layer")
 ax.set_ylabel("Time gate")
 ax.set_title("TEM Jacobian")
@@ -178,7 +184,7 @@ ax = axes_ves[1]
 vmax = max(np.abs(J_ves).max(), 1e-9)
 im = ax.imshow(J_ves, aspect="auto", cmap="RdBu_r", vmin=-vmax, vmax=vmax)
 ax.set_xticks(range(N))
-ax.set_xticklabels(layer_lbls, fontsize=10)
+ax.set_xticklabels(layer_lbls)
 ab2_ticks = list(range(0, _N_DATA, max(1, _N_DATA // 5)))
 ax.set_yticks(ab2_ticks)
 ax.set_yticklabels([f"{ab2[k]:.1f} m" for k in ab2_ticks], fontsize=10)
@@ -227,3 +233,56 @@ with st.expander(":green[Check your understanding -- quiz]"):
             st.success("Correct! A small column norm means few data points respond to that layer, so it cannot be recovered reliably.")
         elif qb is not None:
             st.error("The column norm is a measure of how much information the data carries about a given layer.")
+
+    col3, col4 = st.columns(2)
+    with col3:
+        qc = st.radio(
+            ":red[**A buried conductive layer in the TEM Jacobian usually shows...**]",
+            ["A large column norm (strong sensitivity)",
+             "A near-zero column norm",
+             "Sensitivity only at the earliest gate",
+             "No effect on the data"],
+            index=None, key="jac_q3",
+        )
+        if qc == "A large column norm (strong sensitivity)":
+            st.success("Correct! Conductors carry strong induced currents, so they imprint clearly on the TEM data and are well resolved.")
+        elif qc is not None:
+            st.error("Recall that TEM is most sensitive to conductive layers.")
+    with col4:
+        qd = st.radio(
+            ":red[**Which method gives a resistive layer the larger column norm?**]",
+            ["VES", "TEM", "Neither sees it"],
+            index=None, key="jac_q4",
+        )
+        if qd == "VES":
+            st.success("Correct! Galvanic VES forces current through resistive layers, so it is far more sensitive to them than inductive TEM.")
+        elif qd is not None:
+            st.error("Think about which method forces current through a resistor versus inducing it.")
+
+    qe = st.radio(
+        ":red[**Two adjacent layers have nearly identical Jacobian columns. The inversion will most likely...**]",
+        ["Resolve both layers perfectly",
+         "Trade one layer off against the other (equivalence)",
+         "Diverge and fail",
+         "Ignore those data points"],
+        index=None, key="jac_q5",
+    )
+    if qe == "Trade one layer off against the other (equivalence)":
+        st.success("Correct! Collinear sensitivities mean the data cannot separate the two layers, the classic equivalence / non-uniqueness problem.")
+    elif qe is not None:
+        st.error("If two columns carry the same information, the data cannot tell the layers apart.")
+
+    qf = st.radio(
+        ":red[**A deep layer shows weak sensitivity in BOTH Jacobians. What should you expect?**]",
+        ["Its resistivity is tightly constrained",
+         "Its resistivity is poorly constrained; expect smoothing and equivalence",
+         "The inversion will sharpen that boundary",
+         "It dominates the misfit"],
+        index=None, key="jac_q6",
+    )
+    if qf == "Its resistivity is poorly constrained; expect smoothing and equivalence":
+        st.success("Correct! Low sensitivity at depth means little data leverage there, so the recovered model is smooth and non-unique below the resolved zone.")
+    elif qf is not None:
+        st.error("Weak sensitivity means the data carry little information about that layer.")
+
+render_footer()

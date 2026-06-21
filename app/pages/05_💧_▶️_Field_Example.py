@@ -1,0 +1,427 @@
+"""
+Field example: hard-rock regolith groundwater exploration, West Africa.
+
+Loads a (synthetic but realistic) central-loop TEM sounding from a CSV that
+behaves like genuine field data, inverts it with pyTEM, and walks the user
+through interpreting the model in a hydrogeological context: locating the
+conductive weathered-saprolite aquifer above fresh crystalline basement.
+"""
+
+import os
+import sys
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+plt.rcParams.update({
+    "font.size":       16,
+    "axes.labelsize":  18,
+    "axes.titlesize":  18,
+    "xtick.labelsize": 16,
+    "ytick.labelsize": 16,
+    "legend.fontsize": 16,
+})
+
+import pandas as pd
+import streamlit as st
+
+# -- Path setup ----------------------------------------------------------------
+_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
+
+_APP_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if _APP_DIR not in sys.path:
+    sys.path.insert(0, _APP_DIR)
+
+from pytem import fwd_circle_central, invert as tem_invert
+from ves import forward as ves_forward, invert as ves_invert
+from _shared import render_footer
+
+_DATA = os.path.join(_ROOT, "app", "data", "west_africa_regolith.csv")
+_DATA_VES = os.path.join(_ROOT, "app", "data", "west_africa_regolith_ves.csv")
+_TX_SIDE = 40.0                                   # 40 x 40 m transmitter loop
+_TX_RADIUS = float(np.sqrt(_TX_SIDE ** 2 / np.pi))
+_VES_FILTER = "gs11"
+
+# -- Page header ---------------------------------------------------------------
+st.header(":blue[Field example: finding water in the West-African regolith]")
+
+st.markdown(
+    """
+    Across the crystalline basement of West Africa (Burkina Faso, Ghana, Mali,
+    Cote d'Ivoire ...), most rural water supply comes not from the fresh,
+    impermeable bedrock but from the **weathered overburden, the regolith**,
+    that caps it. A typical weathering profile looks like this:
+
+    | Unit | Character | Resistivity | Role |
+    |------|-----------|-------------|------|
+    | Lateritic / ferricrete cap | hard, iron-rich crust | **high** (hundreds of Ohm.m) | dry, protective |
+    | Saprolite | clay-rich weathered rock | **low** (tens of Ohm.m) | stores water |
+    | Saprock / fractured basement | partly weathered, fractured | low-moderate | yields water |
+    | Fresh basement | unweathered crystalline rock | **very high** (thousands of Ohm.m) | aquiclude |
+
+    The productive aquifer is the **conductive saprolite/saprock** sitting between
+    a resistive cap and the resistive fresh basement. Because TEM is most
+    sensitive to conductive layers, it is an excellent tool for mapping the
+    thickness of this weathered zone and choosing where to drill a borehole.
+    """
+)
+
+st.info(
+    "**The task.** A field crew recorded two soundings at a candidate borehole "
+    "site: a central-loop TEM sounding (40 x 40 m loop) and a Schlumberger VES. "
+    "The true ground is unknown. Invert both, compare what each method resolves, "
+    "then read off how thick the weathered aquifer is and how deep the fresh "
+    "basement lies."
+)
+
+# -- Load the 'field' data -----------------------------------------------------
+@st.cache_data(show_spinner=False)
+def _load_field():
+    df = pd.read_csv(_DATA, comment="#")
+    return (
+        df["time_s"].to_numpy(),
+        df["dbdt_Vm2"].to_numpy(),
+        df["uncertainty_Vm2"].to_numpy(),
+    )
+
+
+@st.cache_data(show_spinner=False)
+def _load_field_ves():
+    df = pd.read_csv(_DATA_VES, comment="#")
+    return (
+        df["ab2_m"].to_numpy(),
+        df["rhoa_ohmm"].to_numpy(),
+        df["uncertainty_ohmm"].to_numpy(),
+    )
+
+try:
+    times, dbdt_obs, sigma = _load_field()
+    ab2, rhoa_obs, rhoa_sigma = _load_field_ves()
+except FileNotFoundError:
+    st.error(
+        "Field dataset not found. Generate it once by running "
+        "`app/data/make_field_data.py` with your Python interpreter."
+    )
+    st.stop()
+
+# -- Show the raw field data ---------------------------------------------------
+st.subheader("1. The measured soundings")
+
+tab_tem, tab_ves = st.tabs(["🧲 TEM", "⚡️ VES"])
+
+with tab_tem:
+    fig_d, ax_d = plt.subplots(figsize=(7, 4.5))
+    ax_d.plot(times, dbdt_obs, "o-", ms=5, color="steelblue", lw=1.5, label="Field data")
+    ax_d.set_xscale("log")
+    ax_d.set_yscale("log")
+    ax_d.set_xlabel("Time [s]")
+    ax_d.set_ylabel(r"|dB/dt| [V/m$^2$]")
+    ax_d.set_title("Central-loop TEM sounding (raw field data)")
+    ax_d.grid(True, which="both", ls="--", alpha=0.4)
+    ax_d.legend()
+    st.pyplot(fig_d, clear_figure=True)
+    st.caption(
+        "The decay curve carries the signature of the layering: an early-time "
+        "plateau from the resistive cap, a sustained mid-time signal from the "
+        "conductive saprolite, and a steep late-time roll-off as the field "
+        "diffuses into the resistive basement."
+    )
+
+with tab_ves:
+    fig_v, ax_v = plt.subplots(figsize=(7, 4.5))
+    ax_v.plot(ab2, rhoa_obs, "o-", ms=5, color="darkorange", lw=1.5, label="Field data")
+    ax_v.set_xscale("log")
+    ax_v.set_yscale("log")
+    ax_v.set_xlabel("AB/2 [m]")
+    ax_v.set_ylabel("Apparent resistivity [Ohm.m]")
+    ax_v.set_title("Schlumberger VES sounding (raw field data)")
+    ax_v.grid(True, which="both", ls="--", alpha=0.4)
+    ax_v.legend()
+    st.pyplot(fig_v, clear_figure=True)
+    st.caption(
+        "The apparent-resistivity curve rises over the resistive cap, dips across "
+        "the conductive saprolite, and climbs again towards the resistive "
+        "basement at large electrode spacings."
+    )
+
+# -- Inversion controls --------------------------------------------------------
+st.subheader("2. Invert both soundings for a resistivity-depth model")
+
+c1, c2 = st.columns(2)
+with c1:
+    start_rho = st.slider(
+        "Starting (half-space) resistivity [Ohm.m]",
+        min_value=20, max_value=500, value=100, step=10,
+        help="Both inversions start from a uniform half-space and refine it.",
+    )
+with c2:
+    max_depth = st.slider(
+        "Maximum model depth [m]",
+        min_value=80, max_value=300, value=200, step=10,
+        help="Depth of the deepest model layer node.",
+    )
+
+@st.cache_data(show_spinner=False)
+def _invert_field(times_t, dbdt_t, sigma_t, tx_r, start_rho, max_depth):
+    times = np.asarray(times_t)
+    dbdt_obs = np.asarray(dbdt_t)
+    noise_std = np.asarray(sigma_t)
+
+    depths = np.logspace(np.log10(2), np.log10(max_depth), 19)
+    thick = np.diff(np.concatenate([[0.0], depths])).tolist()      # 19
+    log_rho0 = np.log(np.full(20, float(start_rho)))               # 20
+
+    res = tem_invert(
+        obs_data=dbdt_obs, thicknesses=thick,
+        log_resistivities=log_rho0, tx_size=tx_r, times=times,
+        noise_std=noise_std, alpha_steps=10, maxit=15,
+        max_noise_frac=0.0,
+        transform="dlf", hankel_filter="key_101", fourier_filter="key_81",
+        analytical_j=True,
+    )
+    dbdt_pred = -fwd_circle_central(
+        thick, res["resistivities"].tolist(), tx_radius=tx_r, times=times
+    )
+    return thick, res["resistivities"], res["rms_history"], dbdt_pred
+
+
+@st.cache_data(show_spinner=False)
+def _invert_field_ves(ab2_t, rhoa_t, start_rho, max_depth):
+    ab2 = np.asarray(ab2_t)
+    rhoa_obs = np.asarray(rhoa_t)
+
+    depths = np.logspace(np.log10(2), np.log10(max_depth), 15)
+    thick = np.diff(np.concatenate([[0.0], depths])).tolist()      # 15
+    rho0 = np.full(16, float(start_rho))                           # 16
+
+    res = ves_invert(
+        ab2=ab2, rhoap_obs=rhoa_obs,
+        resistivities=rho0, thicknesses=thick,
+        regularization="auto", iter_max=15, filter_set=_VES_FILTER,
+        fix_thicknesses=True, noise_frac=0.05,
+    )
+    return thick, res["resistivities"], res["rms_history"], res["rhoap_pred"]
+
+
+def _stair(thick, rho, extra=50.0):
+    nodes = np.concatenate([[0.0], np.cumsum(thick)])
+    bottom = nodes[-1] + extra
+    rs, ds = [], []
+    for i, r in enumerate(rho):
+        d_top = nodes[i]
+        d_bot = nodes[i + 1] if i < len(thick) else bottom
+        rs += [r, r]
+        ds += [d_top, d_bot]
+    return rs, ds
+
+
+if st.button("Run inversions", type="primary"):
+    with st.spinner("Inverting the TEM and VES soundings..."):
+        _res_tem = _invert_field(
+            tuple(times), tuple(dbdt_obs), tuple(sigma),
+            _TX_RADIUS, start_rho, max_depth,
+        )
+        _res_ves = _invert_field_ves(
+            tuple(ab2), tuple(rhoa_obs), start_rho, max_depth,
+        )
+    st.session_state["wa_result"] = _res_tem
+    st.session_state["wa_result_ves"] = _res_ves
+
+if "wa_result" in st.session_state and "wa_result_ves" in st.session_state:
+    thick_r, rho_r, rms_hist, dbdt_pred = st.session_state["wa_result"]
+    thick_v, rho_v, rms_hist_v, rhoa_pred = st.session_state["wa_result_ves"]
+    rho_r = np.asarray(rho_r)
+    rho_v = np.asarray(rho_v)
+
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("TEM final RMS", f"{rms_hist[-1]:.2f}" if rms_hist else "-",
+              help="Target ~1.0 means the fit is consistent with the noise.")
+    m2.metric("TEM iterations", len(rms_hist))
+    _ves_rms_norm = (rms_hist_v[-1] / 0.05) if rms_hist_v else None
+    m3.metric("VES final RMS", f"{_ves_rms_norm:.2f}" if _ves_rms_norm is not None else "-",
+              help="Normalised by the 5% data error; target ~1.0.")
+    m4.metric("VES iterations", len(rms_hist_v))
+
+    # -- Combined recovered models + data fits ---------------------------------
+    fig = plt.figure(figsize=(13, 11))
+    gs = fig.add_gridspec(2, 2, hspace=0.32, wspace=0.3)
+    ax_model = fig.add_subplot(gs[:, 0])
+    ax_tem = fig.add_subplot(gs[0, 1])
+    ax_ves = fig.add_subplot(gs[1, 1])
+
+    rs_t, ds_t = _stair(list(thick_r), list(rho_r))
+    rs_v, ds_v = _stair(list(thick_v), list(rho_v))
+    ax_model.plot(rs_t, ds_t, color="steelblue", lw=2, label="TEM recovered")
+    ax_model.plot(rs_v, ds_v, color="darkorange", lw=2, label="VES recovered")
+    ax_model.set_xscale("log")
+    ax_model.invert_yaxis()
+    ax_model.set_xlabel("Resistivity [Ohm.m]")
+    ax_model.set_ylabel("Depth [m]")
+    ax_model.set_title("Recovered resistivity models")
+    ax_model.grid(True, which="both", ls="--", alpha=0.4)
+    ax_model.legend()
+
+    ax_tem.loglog(times, dbdt_pred, "-", color="steelblue", lw=1.5, label="Predicted")
+    ax_tem.loglog(times, dbdt_obs, "o", color="black", ms=4, label="TEM data")
+    ax_tem.set_xlabel("Time [s]")
+    ax_tem.set_ylabel(r"|dB/dt| [V/m$^2$]")
+    ax_tem.set_title("TEM data fit")
+    ax_tem.grid(True, which="both", ls="--", alpha=0.4)
+    ax_tem.legend()
+
+    ax_ves.loglog(ab2, rhoa_pred, "-", color="darkorange", lw=1.5, label="Predicted")
+    ax_ves.loglog(ab2, rhoa_obs, "o", color="black", ms=4, label="VES data")
+    ax_ves.set_xlabel("AB/2 [m]")
+    ax_ves.set_ylabel("Apparent resistivity [Ohm.m]")
+    ax_ves.set_title("VES data fit")
+    ax_ves.grid(True, which="both", ls="--", alpha=0.4)
+    ax_ves.legend()
+    st.pyplot(fig, clear_figure=True)
+
+    # -- Interpretation --------------------------------------------------------
+    st.subheader("3. Hydrogeological interpretation")
+
+    depth_nodes = np.concatenate([[0.0], np.cumsum(thick_r)])
+    layer_top = depth_nodes[:-1]
+    # Most conductive layer in the top 100 m anchors the regolith aquifer
+    upper = np.where(layer_top < 100.0)[0]
+    pool = upper if upper.size else np.arange(len(rho_r) - 1)
+    aq_idx = pool[np.argmin(rho_r[pool])]
+    aq_rho = rho_r[aq_idx]
+
+    # Span the contiguous conductor: layers within 1.5x of the minimum
+    cond_thr = 1.5 * aq_rho
+    top_i = aq_idx
+    while top_i - 1 >= 0 and rho_r[top_i - 1] < cond_thr:
+        top_i -= 1
+    bot_i = aq_idx
+    while bot_i + 1 < len(rho_r) and rho_r[bot_i + 1] < cond_thr:
+        bot_i += 1
+    aq_top = depth_nodes[top_i]
+    aq_base = depth_nodes[bot_i + 1]
+    aq_thick = max(aq_base - aq_top, 0.0)
+
+    ic1, ic2, ic3 = st.columns(3)
+    ic1.metric("Aquifer resistivity", f"{aq_rho:.0f} Ohm.m")
+    ic2.metric("Top of saprolite", f"{aq_top:.0f} m")
+    ic3.metric("Weathered thickness", f"{aq_thick:.0f} m",
+               help="From top of the conductor to the resistive basement.")
+
+    st.markdown(
+        f"""
+        **Reading the model.**
+
+        - A **resistive surface layer** corresponds to the dry lateritic/ferricrete cap.
+        - Below it, a **conductive zone (~{aq_rho:.0f} Ohm.m)** starting near
+          **{aq_top:.0f} m** is the **clay-rich saprolite**, the water-storing regolith.
+        - Resistivity then rises sharply into the **fresh crystalline basement**
+          near **{aq_base:.0f} m**, marking the base of the productive weathered zone.
+
+        **Drilling guidance.** A borehole here should target the saturated
+        saprolite/saprock interval, roughly **{aq_top:.0f}-{aq_base:.0f} m**, and be
+        drilled a few metres into fractured basement to maximise yield. A total
+        weathered thickness of about **{aq_thick:.0f} m** is encouraging: thicker
+        regolith generally means greater storage and a more reliable supply.
+        """
+    )
+
+    st.markdown(
+        """
+        **What each method contributed.** The two recovered models (left panel above)
+        emphasise different parts of the section:
+
+        - **TEM (blue)** pins down the **conductive saprolite aquifer**, its
+          resistivity and its base, because inductive eddy currents concentrate in
+          conductors.
+        - **VES (orange)** better expresses the **resistive lateritic cap** and the
+          rise into **fresh basement**, because galvanic current is forced through
+          resistive layers.
+
+        Where the two models **agree**, you can trust the interpretation: each method
+        is individually non-unique, so joint agreement is the strongest evidence that
+        a feature is real.
+        """
+    )
+
+    st.warning(
+        "Caveats: TEM resolves *conductance* (thickness x conductivity) better "
+        "than the two separately, so the aquifer boundaries carry uncertainty. "
+        "Low resistivity can also reflect dry, compact clay rather than usable "
+        "water, so confirm with a pumping test and, ideally, several soundings."
+    )
+
+# -- Quiz: which method resolves which feature ---------------------------------
+st.subheader(":violet[Check your intuition: which method resolves what?]", divider="violet")
+st.markdown(
+    "For each feature of the West-African weathering profile, decide which method "
+    "is **better suited** to resolving it, then check your answers."
+)
+
+_FE_QUIZ = [
+    {
+        "q": "The conductive saprolite aquifer (its resistivity and how deep it goes):",
+        "options": ["TEM", "VES", "Equally well"],
+        "answer": "TEM",
+        "why": "Inductive TEM drives eddy currents that concentrate in conductors, "
+               "so the conductive saprolite dominates the decay and is well resolved.",
+    },
+    {
+        "q": "The thin, resistive lateritic / ferricrete cap at the surface:",
+        "options": ["TEM", "VES", "Equally well"],
+        "answer": "VES",
+        "why": "Galvanic VES forces current through resistive layers, so it expresses "
+               "the resistive cap more sharply than inductive TEM.",
+    },
+    {
+        "q": "The transition into the resistive fresh basement at depth:",
+        "options": ["TEM", "VES", "Neither sees it"],
+        "answer": "VES",
+        "why": "VES resolves the rise into resistive basement better; TEM mainly "
+               "constrains the base of the conductor, not the resistivity beneath it.",
+    },
+    {
+        "q": "When both inversions agree on the aquifer base, that agreement mainly gives you:",
+        "options": [
+            "A faster inversion",
+            "Higher confidence despite each method's non-uniqueness",
+            "A greater exploration depth",
+        ],
+        "answer": "Higher confidence despite each method's non-uniqueness",
+        "why": "Each sounding alone is non-unique; two independent methods agreeing on "
+               "a feature is strong evidence that it is real.",
+    },
+]
+
+_fe_user = [
+    st.radio(_item["q"], _item["options"], index=None, key=f"fe_quiz_{_i}")
+    for _i, _item in enumerate(_FE_QUIZ)
+]
+
+if st.button("Check my answers", key="fe_quiz_check"):
+    _score = 0
+    for _i, _item in enumerate(_FE_QUIZ):
+        if _fe_user[_i] == _item["answer"]:
+            _score += 1
+            st.success(f"Q{_i + 1}: Correct. {_item['why']}")
+        elif _fe_user[_i] is None:
+            st.warning(
+                f"Q{_i + 1}: Not answered. Correct answer: "
+                f"**{_item['answer']}**. {_item['why']}"
+            )
+        else:
+            st.error(
+                f"Q{_i + 1}: Not quite. Correct answer: "
+                f"**{_item['answer']}**. {_item['why']}"
+            )
+    st.metric("Your score", f"{_score} / {len(_FE_QUIZ)}")
+    if _score == len(_FE_QUIZ):
+        st.balloons()
+
+st.divider()
+st.caption(
+    "Synthetic field dataset for teaching purposes; not from a real survey."
+)
+
+render_footer()

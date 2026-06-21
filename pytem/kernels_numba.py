@@ -1,5 +1,5 @@
 """
-kernels_numba.py — Numba JIT kernels for TEM forward modelling.
+kernels_numba.py - Numba JIT kernels for TEM forward modelling.
 
 Contains:
   - _te_rte_jit          : Wait recursion (complex), scalar loops
@@ -89,14 +89,18 @@ if HAS_NUMBA:
     # ------------------------------------------------------------------
     @nb.njit(**_NB_OPTS)
     def _tem_square_jit(times, thicknesses, resistivities,
-                        offset_dist_q, area_w, mu0,
+                        dist_q, area_w, mu0,
                         hankel_base, hankel_j0,
                         fourier_base, fourier_weights,
-                        filter_weights):
-        """Square-loop dBz/dt via VMD area integral (Fourier DLF, Numba)."""
+                        filter_weights, altitude=0.0):
+        """Square-loop dBz/dt via VMD area integral (Fourier DLF, Numba).
+
+        altitude : total Tx+Rx elevation [m]; applies an exp(-lam*altitude)
+        upward continuation factor per wavenumber (0.0 = on ground).
+        """
         n_t = len(times)
         n_f = len(fourier_base)
-        n_q = len(offset_dist_q)
+        n_q = len(dist_q)
         n_lam = len(hankel_base)
         dbdt = np.empty(n_t)
 
@@ -108,7 +112,7 @@ if HAS_NUMBA:
                 hz_c = 0.0 + 0.0j
 
                 for q in range(n_q):
-                    dist = offset_dist_q[q]
+                    dist = dist_q[q]
                     lam = np.empty(n_lam)
                     for m in range(n_lam):
                         lam[m] = hankel_base[m] / dist
@@ -117,9 +121,15 @@ if HAS_NUMBA:
                                        resistivities, mu0)
 
                     g_c = 0.0 + 0.0j
-                    for m in range(n_lam):
-                        lm = lam[m]
-                        g_c += r_te[m] * (lm * lm) * hankel_j0[m]
+                    if altitude != 0.0:
+                        for m in range(n_lam):
+                            lm = lam[m]
+                            g_c += (r_te[m] * (lm * lm) * hankel_j0[m]
+                                    * np.exp(-lm * altitude))
+                    else:
+                        for m in range(n_lam):
+                            lm = lam[m]
+                            g_c += r_te[m] * (lm * lm) * hankel_j0[m]
                     g_c = g_c / dist / (4.0 * np.pi)
                     hz_c += area_w[q] * g_c
 
@@ -178,14 +188,18 @@ if HAS_NUMBA:
     # ------------------------------------------------------------------
     @nb.njit(**_NB_OPTS)
     def _tem_square_euler_jit(times, thicknesses, resistivities,
-                              offset_dist_q, area_w, mu0,
+                              dist_q, area_w, mu0,
                               hankel_base, hankel_j0,
                               euler_eta, euler_A,
-                              filter_weights):
-        """Square-loop dBz/dt via Euler-accelerated Bromwich + VMD integral."""
+                              filter_weights, altitude=0.0):
+        """Square-loop dBz/dt via Euler-accelerated Bromwich + VMD integral.
+
+        altitude : total Tx+Rx elevation [m]; applies an exp(-lam*altitude)
+        upward continuation factor per wavenumber (0.0 = on ground).
+        """
         n_t = len(times)
         n_euler = len(euler_eta)
-        n_q = len(offset_dist_q)
+        n_q = len(dist_q)
         n_lam = len(hankel_base)
         half_A = euler_A / 2.0
         pi_val = np.pi
@@ -203,7 +217,7 @@ if HAS_NUMBA:
                 hz = 0.0 + 0.0j
 
                 for q in range(n_q):
-                    dist = offset_dist_q[q]
+                    dist = dist_q[q]
                     lam = np.empty(n_lam)
                     for m in range(n_lam):
                         lam[m] = hankel_base[m] / dist
@@ -211,9 +225,15 @@ if HAS_NUMBA:
                     r_te = _te_rte_jit(lam, omega, thicknesses,
                                        resistivities, mu0)
                     g = 0.0 + 0.0j
-                    for m in range(n_lam):
-                        lm = lam[m]
-                        g += r_te[m] * (lm * lm) * hankel_j0[m]
+                    if altitude != 0.0:
+                        for m in range(n_lam):
+                            lm = lam[m]
+                            g += (r_te[m] * (lm * lm) * hankel_j0[m]
+                                  * np.exp(-lm * altitude))
+                    else:
+                        for m in range(n_lam):
+                            lm = lam[m]
+                            g += r_te[m] * (lm * lm) * hankel_j0[m]
                     g = g / dist / (4.0 * pi_val)
                     hz += area_w[q] * g
 

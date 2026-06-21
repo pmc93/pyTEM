@@ -5,11 +5,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 # -- Matplotlib font sizes (mobile-friendly) --------------------------
 plt.rcParams.update({
-    "axes.labelsize":  14,
-    "axes.titlesize":  15,
-    "xtick.labelsize": 12,
-    "ytick.labelsize": 12,
-    "legend.fontsize": 11,
+    "font.size":       16,
+    "axes.labelsize":  18,
+    "axes.titlesize":  18,
+    "xtick.labelsize": 16,
+    "ytick.labelsize": 16,
+    "legend.fontsize": 16,
 })
 
 import streamlit as st
@@ -19,8 +20,13 @@ _ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
+_APP_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if _APP_DIR not in sys.path:
+    sys.path.insert(0, _APP_DIR)
+
 from pytem import fwd_circle_central
 from ves import forward as ves_forward
+from _shared import render_footer
 
 # ── Shared utilities ──────────────────────────────────────────────────────────
 _RHO = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000]
@@ -71,8 +77,28 @@ st.header(":blue[Predicted response for a layered earth model]")
 st.markdown(
     "Build a layered resistivity model and see the predicted sounding curve "
     "update in real time. Each tab is independent; you can explore different "
-    "models for TEM and VES."
+    "models for TEM and VES. In both cases a 100 Ohm.m reference is included."
 )
+
+with st.expander("Why forward modelling?", expanded=False):
+    st.markdown(
+        """
+        **Forward modelling** answers the question: *if the ground really had this
+        resistivity structure, what would the instrument measure?* It is the engine
+        inside every inversion, and on its own it builds the intuition you need to
+        interpret real data:
+
+        - **Survey design** - check whether your chosen time gates or electrode
+          spacings actually "see" the target depth before going to the field.
+        - **Feasibility** - if a thin aquifer barely changes the predicted curve, no
+          inversion will recover it reliably either.
+        - **Intuition** - watch how making a layer thinner, deeper, or more
+          conductive reshapes the sounding curve.
+
+        Move the sliders below and watch the left panel (the measured curve) respond
+        to the right panel (your model).
+        """
+    )
 
 tab_tem, tab_ves = st.tabs(["🧲 TEM", "⚡️ VES"])
 
@@ -85,8 +111,8 @@ with tab_tem:
     st.markdown("**System Parameters**")
     col_s1, col_s2 = st.columns(2)
     with col_s1:
-        tx_area = st.number_input("Tx loop area (m²)", min_value=100, max_value=500000, value=1600, step=100, key="fwd_tem_area")
-        tx_r = float(np.sqrt(tx_area / np.pi))
+        tx_side = st.number_input("Tx loop side length (m)", min_value=5, max_value=500, value=40, step=5, key="fwd_tem_side")
+        tx_r = float(np.sqrt(tx_side ** 2 / np.pi))
         n_t = int(st.number_input("Time gates", 5, 50, 25, key="fwd_tem_nt"))
     with col_s2:
         t_min = st.slider("log₁₀(Early time [s])", -6.0, -4.0, -5.0, 0.25, key="fwd_tem_tmin")
@@ -104,13 +130,18 @@ with tab_tem:
     try:
         with st.spinner("Computing …"):
             dbdt = _tem_fwd(tuple(t_thick), tuple(t_rho), tx_r, tuple(times.tolist()))
+            dbdt_ref = _tem_fwd((), (100.0,), tx_r, tuple(times.tolist()))
 
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
 
-        ax1.loglog(times * 1e3, dbdt, "o-", color="steelblue", ms=4, lw=1.5)
+        ax1.loglog(times * 1e3, dbdt_ref, "--", color="black", lw=1.5,
+                   label="Homogeneous 100 Ohm.m", zorder=1)
+        ax1.loglog(times * 1e3, dbdt, "o-", color="steelblue", ms=4, lw=1.5,
+                   label="Layered model", zorder=2)
         ax1.set_xlabel("Time (ms)")
-        ax1.set_ylabel(r"|dB/dt| [A/m$^2$]")
+        ax1.set_ylabel(r"|dB/dt| [V/m$^2$]")
         ax1.grid(True, which="both", ls="--", alpha=0.4)
+        ax1.legend()
 
         rs, ds = _stair(t_thick, t_rho)
         _span_m = max(rs) / min(r for r in rs if r > 0)
@@ -130,6 +161,24 @@ with tab_tem:
         plt.tight_layout()
         st.pyplot(fig)
         plt.close(fig)
+
+        with st.expander("How to read the TEM curve"):
+            st.markdown(
+                """
+                - **Time is a proxy for depth:** early gates (left) sense shallow
+                  ground, late gates (right) sense deeper. A model change that only
+                  moves the late-time tail is happening at depth.
+                - **Conductive layers slow the decay:** eddy currents linger in a
+                  conductor, holding the dB/dt curve up for longer.
+                - **Resistive layers let the field diffuse away quickly,** steepening
+                  the decay. Because resistors carry little induced current, TEM is
+                  relatively insensitive to them, so a thin resistor barely changes
+                  the curve.
+                - **The late-time noise floor** (not shown here) eventually swallows
+                  the signal: if your target only changes the curve below that floor,
+                  it is effectively invisible in the field.
+                """
+            )
     except Exception as _e:
         st.warning(f"⚠️ Could not compute: {_e}. Adjust the sliders and click **🧮 Compute forward model**.")
 
@@ -160,20 +209,26 @@ with tab_ves:
     try:
         with st.spinner("Computing …"):
             rhoap = _ves_fwd(tuple(ab2.tolist()), tuple(v_rho), tuple(v_thick), filt)
+            rhoap_ref = _ves_fwd(tuple(ab2.tolist()), (100.0,), (), filt)
 
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
 
-        _span_v = np.log10(rhoap.max()) - np.log10(rhoap.min())
+        _rho_all = np.concatenate([rhoap, rhoap_ref])
+        _span_v = np.log10(_rho_all.max()) - np.log10(_rho_all.min())
         if _span_v < 2.5:
-            _ctr_v = (np.log10(rhoap.max()) + np.log10(rhoap.min())) / 2
+            _ctr_v = (np.log10(_rho_all.max()) + np.log10(_rho_all.min())) / 2
             _vlo, _vhi = 10 ** (_ctr_v - 1.25), 10 ** (_ctr_v + 1.25)
         else:
-            _vlo, _vhi = rhoap.min() * 0.8, rhoap.max() * 1.25
-        ax1.loglog(ab2, rhoap, "o-", color="darkorange", ms=4, lw=1.5)
+            _vlo, _vhi = _rho_all.min() * 0.8, _rho_all.max() * 1.25
+        ax1.loglog(ab2, rhoap_ref, "--", color="black", lw=1.5,
+                   label="Homogeneous 100 Ohm.m", zorder=1)
+        ax1.loglog(ab2, rhoap, "o-", color="darkorange", ms=4, lw=1.5,
+                   label="Layered model", zorder=2)
         ax1.set_ylim(_vlo, _vhi)
         ax1.set_xlabel(r"AB/2 [m]")
         ax1.set_ylabel("Apparent resistivity [Ohm.m]")
         ax1.grid(True, which="both", ls="--", alpha=0.4)
+        ax1.legend()
 
         rs, ds = _stair(v_thick, v_rho)
         _span_m = max(rs) / min(r for r in rs if r > 0)
@@ -193,5 +248,107 @@ with tab_ves:
         plt.tight_layout()
         st.pyplot(fig)
         plt.close(fig)
+
+        with st.expander("How to read the VES curve"):
+            st.markdown(
+                """
+                - **Electrode spacing is a proxy for depth:** small AB/2 (left)
+                  samples shallow ground, large AB/2 (right) drives current deeper.
+                - **Apparent resistivity is a smoothed average** of the true layers
+                  the current passes through, so sharp boundaries appear as gentle
+                  rises and falls, not steps.
+                - **Resistive layers push the curve up; conductive layers pull it
+                  down.** VES expresses a resistive layer clearly (current is forced
+                  through it), which is where it complements TEM.
+                - **Equivalence:** a thin layer can often be traded for a thicker,
+                  proportionally different one with almost the same curve, a key
+                  ambiguity to keep in mind when interpreting.
+                """
+            )
     except Exception as _e:
         st.warning(f"⚠️ Could not compute: {_e}. Adjust the sliders and click **📊 Compute forward model**.")
+
+# ═══════════════════════════════════════════════════════════════════════════════════════════════
+# Sensitivity challenge + self-check
+# ═══════════════════════════════════════════════════════════════════════════════════════════════
+st.divider()
+st.subheader(":violet[Try it yourself: how sensitive is each method?]", divider="violet")
+st.markdown(
+    """
+    Use the model sliders above (and the dashed **homogeneous 100 Ohm.m** reference
+    line for comparison) to run these quick experiments, then answer below.
+
+    1. **Buried conductor.** Start from `100 / 100 / 100` Ohm.m and drop the middle
+       layer to `5` Ohm.m. Watch how the TEM decay and the VES curve move away from
+       the reference line.
+    2. **Buried resistor.** Now set the middle layer to `5000` Ohm.m instead. Compare
+       how much the TEM curve changes versus how much the VES curve changes.
+    3. **Depth of burial.** Make the conductive layer deeper by increasing the top
+       layer thickness, and see which part of the curve (early vs late time) responds.
+    """
+)
+
+_FWD_QUIZ = [
+    {
+        "q": "You bury a conductive layer (e.g. middle layer = 5 Ohm.m). Versus the "
+             "homogeneous 100 Ohm.m line, the TEM decay curve:",
+        "options": [
+            "Stays elevated for longer (decays more slowly)",
+            "Drops faster (decays more quickly)",
+            "Is unchanged",
+        ],
+        "answer": "Stays elevated for longer (decays more slowly)",
+        "why": "Eddy currents linger in the conductor, holding |dB/dt| up at later "
+               "times, the hallmark TEM response to a buried conductor.",
+    },
+    {
+        "q": "You instead bury a very resistive layer (e.g. 5000 Ohm.m). On the TEM "
+             "curve, compared with the homogeneous case the change is:",
+        "options": [
+            "Large and obvious",
+            "Small, TEM is weakly sensitive to resistive layers",
+            "The curve disappears",
+        ],
+        "answer": "Small, TEM is weakly sensitive to resistive layers",
+        "why": "Resistive layers carry little induced current, so they barely reshape "
+               "the TEM decay. This is TEM's main blind spot.",
+    },
+    {
+        "q": "That same buried resistor on the VES apparent-resistivity curve produces:",
+        "options": [
+            "A clear rise above the 100 Ohm.m reference",
+            "No visible change",
+            "A drop below the reference",
+        ],
+        "answer": "A clear rise above the 100 Ohm.m reference",
+        "why": "Galvanic VES forces current through resistive layers, so a buried "
+               "resistor lifts the apparent resistivity, where VES complements TEM.",
+    },
+]
+
+_fwd_user = [
+    st.radio(_item["q"], _item["options"], index=None, key=f"fwd_quiz_{_i}")
+    for _i, _item in enumerate(_FWD_QUIZ)
+]
+
+if st.button("Check my answers", key="fwd_quiz_check"):
+    _score = 0
+    for _i, _item in enumerate(_FWD_QUIZ):
+        if _fwd_user[_i] == _item["answer"]:
+            _score += 1
+            st.success(f"Q{_i + 1}: Correct. {_item['why']}")
+        elif _fwd_user[_i] is None:
+            st.warning(
+                f"Q{_i + 1}: Not answered. Correct answer: "
+                f"**{_item['answer']}**. {_item['why']}"
+            )
+        else:
+            st.error(
+                f"Q{_i + 1}: Not quite. Correct answer: "
+                f"**{_item['answer']}**. {_item['why']}"
+            )
+    st.metric("Your score", f"{_score} / {len(_FWD_QUIZ)}")
+    if _score == len(_FWD_QUIZ):
+        st.balloons()
+
+render_footer()

@@ -20,12 +20,12 @@ def euler_invert(F, t, N=15, A=18.4):
     ----------
     F : callable  F(s) -> complex, the Laplace-domain function
     t : float     time at which to evaluate the inverse
-    N : int       half-order (default 15 — 31 evaluations, ~8 digits)
+    N : int       half-order (default 15 - 31 evaluations, ~8 digits)
     A : float     Bromwich abscissa parameter (default 18.4)
 
     Returns
     -------
-    f(t) : float — the time-domain value
+    f(t) : float - the time-domain value
     """
     c = A / (2.0 * t)
     h = np.pi / t

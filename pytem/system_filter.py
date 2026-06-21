@@ -1,9 +1,9 @@
 """
-system_filter.py — Butterworth bandpass and cascade system transfer functions.
+system_filter.py - Butterworth bandpass and cascade system transfer functions.
 
 Contains:
-  butterworth_filter  — 1st or 2nd order Butterworth LP/HP/BP
-  cascade_filter      — WalkTEM convention (two cascaded 1st-order LP)
+  butterworth_filter  - 1st or 2nd order Butterworth LP/HP/BP
+  cascade_filter      - WalkTEM convention (two cascaded 1st-order LP)
 """
 
 import numpy as np
@@ -44,8 +44,13 @@ def butterworth_filter(f_low=None, f_high=None, order=1):
     return H
 
 
-def cascade_filter(filtfreq):
-    """Two cascaded 1st-order Butterworth LP (WalkTEM convention)."""
+def cascade_filter(filtfreq, f_fixed):
+    """Two cascaded 1st-order Butterworth low-pass stages (WalkTEM convention).
+
+    filtfreq : variable lower cutoff frequency [Hz]
+    f_fixed  : fixed upper cutoff frequency [Hz] (e.g. 3e5 for the WalkTEM
+               300 kHz analog front-end)
+    """
     H1 = butterworth_filter(f_high=filtfreq, order=1)
-    H2 = butterworth_filter(f_high=3e5, order=1)
+    H2 = butterworth_filter(f_high=f_fixed, order=1)
     return lambda omega: H1(omega) * H2(omega)

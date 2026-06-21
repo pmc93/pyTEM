@@ -1,5 +1,5 @@
-﻿"""
-forward.py — TEM forward modelling functions and analytical solutions.
+"""
+forward.py - TEM forward modelling functions and analytical solutions.
 
 Internal helpers:
     _rx_scale, _resolve_filters, _resolve_gpu_filters,
@@ -8,14 +8,14 @@ Internal helpers:
     _run_circular, _run_square
 
 Forward functions:
-    fwd_circle_central  — central-loop circular Tx, Rx at loop centre
-    fwd_circle_offset   — circular Tx, Rx at radial offset
-    fwd_square_central  — central square-loop Tx, Rx at loop centre
-    fwd_square_offset   — square Tx, Rx at arbitrary (rx_x, rx_y)
+    fwd_circle_central  - central-loop circular Tx, Rx at loop centre
+    fwd_circle_offset   - circular Tx, Rx at radial offset
+    fwd_square_central  - central square-loop Tx, Rx at loop centre
+    fwd_square_offset   - square Tx, Rx at arbitrary (rx_x, rx_y)
 
 Analytical solutions:
-    fwd_analytical_central         — Ward & Hohmann eq 4.69a
-    fwd_analytical_offset  — Ward & Hohmann eq 4.97
+    fwd_analytical_central         - Ward & Hohmann eq 4.69a
+    fwd_analytical_offset  - Ward & Hohmann eq 4.97
 
 Adding a new geometry
 ---------------------
@@ -52,12 +52,38 @@ if HAS_CUDA:
 # ============================================================================
 
 def _rx_scale(rx_area=1.0, rx_turns=1):
-    """Receiver effective area scaling factor (N * A)."""
+    """Receiver effective-area scaling factor.
+
+    The voltage induced in a multi-turn coil scales with the total effective
+    area N * A (turns times the area of one turn).  The kernels return dBz/dt
+    per unit effective area, so the final response is multiplied by this factor.
+    """
     return float(rx_area) * float(rx_turns)
 
 
 def _resolve_filters(hankel_filter, fourier_filter, transform, euler_order=11):
-    """Look up filter coefficient arrays from registries."""
+    """Look up the digital-filter / quadrature coefficient arrays.
+
+    The forward model evaluates a Hankel transform (space -> wavenumber) and an
+    inverse time transform (frequency or Laplace -> time).  Both are weighted
+    sums over precomputed abscissae stored in module-level registries.
+
+    Parameters
+    ----------
+    hankel_filter  : str  key into HANKEL_FILTERS (e.g. 'key_101', 'key_201')
+    fourier_filter : str  key into FOURIER_FILTERS (e.g. 'key_81', 'key_101')
+    transform      : str  'dlf' for the sine/cosine digital linear filter, or
+                          'euler' for the Euler-Stehfest inverse Laplace scheme
+    euler_order    : int  number of Euler terms when transform == 'euler'
+
+    Returns
+    -------
+    tuple : (h_base, h_j0, h_j1, f_base, f_sin, f_cos, e_eta, e_A)
+        h_base, h_j0, h_j1 are the Hankel abscissae and J0 / J1 weights.
+        For 'dlf' the Fourier triplet (f_base, f_sin, f_cos) is filled and the
+        Euler slots are None; for 'euler' the Euler parameters (e_eta, e_A) are
+        filled and the Fourier slots are None.
+    """
     h_base, h_j0, h_j1 = HANKEL_FILTERS[hankel_filter]
     if transform == 'dlf':
         f_base, f_sin, f_cos = FOURIER_FILTERS[fourier_filter]
@@ -68,7 +94,16 @@ def _resolve_filters(hankel_filter, fourier_filter, transform, euler_order=11):
 
 
 def _resolve_gpu_filters(hankel_filter, fourier_filter, transform):
-    """Look up GPU (CuPy) filter arrays from registries."""
+    """Look up the same filter arrays as _resolve_filters, but as CuPy arrays.
+
+    Used by the CUDA backend so the weights already live in device memory.
+    Only the DLF (sine/cosine) path is GPU-accelerated, so the Fourier triplet
+    is returned as None when transform != 'dlf'.
+
+    Returns
+    -------
+    tuple : (d_h_base, d_h_j0, d_h_j1, d_f_base, d_f_sin, d_f_cos) device arrays.
+    """
     d_h_base, d_h_j0, d_h_j1 = GPU_HANKEL[hankel_filter]
     if transform == 'dlf':
         d_f_base, d_f_sin, d_f_cos = GPU_FOURIER[fourier_filter]
@@ -78,7 +113,20 @@ def _resolve_gpu_filters(hankel_filter, fourier_filter, transform):
 
 
 def _apply_signal_scaling(dbdt, current, signal, transform):
-    """Apply current amplitude and step-off/step-on/impulse sign convention."""
+    """Scale the raw transform output by current and the waveform convention.
+
+    The kernels return a unit-current response in the natural sign of the
+    chosen transform.  This applies the Tx current amplitude and the
+    step-off / step-on / impulse sign and normalisation, in place.
+
+    Parameters
+    ----------
+    dbdt      : ndarray  raw response, modified in place and returned
+    current   : float    Tx current [A]
+    signal    : int      -1 = step-off, +1 = step-on, 0 = impulse
+    transform : str      'dlf' (applies the 2/pi sine-transform factor) or
+                         'euler' (sign only)
+    """
     if transform == 'euler':
         dbdt *= current * float(signal)
     else:  # dlf
@@ -90,7 +138,17 @@ def _apply_signal_scaling(dbdt, current, signal, transform):
 
 
 def _precompute_filter_dlf(system_filter, times, f_base):
-    """Pre-evaluate system_filter(omega) at all DLF Fourier frequencies."""
+    """Pre-evaluate the system filter at every DLF Fourier frequency.
+
+    For the sine/cosine digital linear filter, each gate time t maps to a fixed
+    set of angular frequencies omega = f_base / t.  Evaluating the (model-
+    independent) system filter H(omega) once on this (n_t, n_f) grid lets the
+    kernels reuse it instead of recomputing it on every forward call.
+
+    Returns
+    -------
+    ndarray, shape (n_t, n_f), complex : H(omega) at each gate and abscissa.
+    """
     n_t = len(times)
     n_f = len(f_base)
     fw = np.empty((n_t, n_f), dtype=np.complex128)
@@ -101,7 +159,17 @@ def _precompute_filter_dlf(system_filter, times, f_base):
 
 
 def _precompute_filter_euler(system_filter, times, e_eta, e_A):
-    """Pre-evaluate system_filter(omega) at all Euler/Bromwich points."""
+    """Pre-evaluate the system filter at every Euler-Stehfest Bromwich point.
+
+    The Euler inverse Laplace transform samples the response on a vertical line
+    in the complex s-plane, s = c + i*k*pi/t for k = 0..n_euler-1 with
+    c = e_A / (2t).  Each Laplace point maps to omega = s / i, where the system
+    filter is evaluated once per gate time.
+
+    Returns
+    -------
+    ndarray, shape (n_t, n_euler), complex : H(omega) at each Bromwich point.
+    """
     n_t = len(times)
     n_euler = len(e_eta)
     fw = np.empty((n_t, n_euler), dtype=np.complex128)
@@ -116,69 +184,185 @@ def _precompute_filter_euler(system_filter, times, e_eta, e_A):
     return fw
 
 
-def _vmd_greenfct(offset_dist, omega, thicknesses, resistivities, h_base, h_j0):
-    """VMD Green's function G(offset_dist, omega) via J0 Hankel DLF.
+def _vmd_greenfct(dist, omega, thicknesses, resistivities, h_base, h_j0,
+                  altitude=0.0):
+    """Vertical-magnetic-dipole Green's function via a J0 Hankel transform.
 
-    offset_dist : source-element to receiver distance [m]
+    Evaluates the vertical magnetic field at horizontal distance ``dist`` from a
+    unit VMD over a layered earth, for one angular frequency.  The Hankel
+    integral over wavenumber lam is approximated by the J0 digital linear
+    filter: G = sum( r_TE(lam) * lam^2 * J0_weights ) / dist / (4 pi), where
+    r_TE is the transverse-electric reflection coefficient of the layer stack.
+
+    Parameters
+    ----------
+    dist          : float   source-element to receiver distance [m]
+    omega         : complex angular frequency [rad/s]
+    thicknesses   : ndarray layer thicknesses [m]
+    resistivities : ndarray layer resistivities [Ohm.m]
+    h_base, h_j0  : ndarray Hankel abscissae and J0 filter weights
+    altitude      : float   total Tx+Rx elevation [m]; adds an
+                            exp(-lam*altitude) upward-continuation factor to
+                            each wavenumber (0.0 = on ground).
+
+    Returns
+    -------
+    complex : the Green's function G(dist, omega).
     """
-    lam = h_base / offset_dist
+    lam = h_base / dist
     r_te = te_reflection_coeff(lam, omega, thicknesses, resistivities)
-    return np.dot(r_te * lam**2, h_j0) / offset_dist / (4.0 * np.pi)
+    weight = r_te * lam**2
+    if altitude != 0.0:
+        weight = weight * np.exp(-lam * altitude)
+    return np.dot(weight, h_j0) / dist / (4.0 * np.pi)
+
+
+def _filter_weights(system_filter, times, transform, f_base, e_eta, e_A):
+    """Pre-evaluate the system filter at every transform frequency.
+
+    Returns an (n_t, n_eval) complex array, or None when no filter is set.
+    The result depends only on the gate times and the filter, not on the
+    earth model, so callers can compute it once and reuse it.
+    """
+    if system_filter is None:
+        return None
+    if transform == 'dlf':
+        return _precompute_filter_dlf(system_filter, times, f_base)
+    return _precompute_filter_euler(system_filter, times, e_eta, e_A)
+
+
+def _integrate_python(hz_sec, times, signal, transform,
+                      f_base, f_sin, f_cos, e_eta, e_A):
+    """Reference pure-Python time-domain integration shared by all geometries.
+
+    hz_sec(omega) returns the (already filtered) secondary field at one
+    angular frequency.  This routine handles the DLF step-off/step-on case
+    (signal = +-1), the DLF impulse case (signal = 0), and the Euler-Stehfest
+    inverse Laplace transform, so the circular and square dispatchers only
+    have to supply their own hz_sec closure.
+    """
+    dbdt = np.zeros(len(times))
+    if transform == 'euler':
+        n_eval = len(e_eta)
+        ks = np.arange(n_eval, dtype=float)
+        for i, t in enumerate(times):
+            c = e_A / (2.0 * t)
+            vals = np.array([np.real(MU0 * hz_sec((c + k * np.pi / t * 1j) / 1j))
+                             for k in range(n_eval)])
+            dbdt[i] = np.exp(e_A / 2.0) / t * np.dot(e_eta * (-1.0)**ks, vals)
+    else:
+        for i, t in enumerate(times):
+            omega_pts = f_base / t
+            if signal in (-1, 1):
+                spectral = np.array([MU0 * np.imag(hz_sec(w)) for w in omega_pts])
+                dbdt[i] = np.dot(spectral, f_sin) / t
+            else:  # impulse (signal=0)
+                spectral = np.array([np.real(-MU0 * 1j * w * hz_sec(w))
+                                     for w in omega_pts])
+                dbdt[i] = np.dot(spectral, f_cos) / t
+    return dbdt
+
 
 
 # ============================================================================
 # Geometry builders
 # ============================================================================
 
-def _build_circular_geometry(tx_radius, h_base, rx_offset=0.0):
+def _build_circular_geometry(tx_radius, h_base, rx_offset=0.0, altitude=0.0):
     """
-    Pre-compute per-wavenumber extra weights for a circular Tx loop.
+    Pre-compute the per-wavenumber extra weights for a circular Tx loop.
 
-    Central receiver (rx_offset=0): returns ones (standard J1 loop integral).
-    Offset receiver: returns J0(lam * rx_offset) - the additional Bessel factor.
+    The circular-loop kernel evaluates a J1 Hankel integral at wavenumbers
+    lam = h_base / tx_radius.  This routine returns the extra multiplicative
+    weight applied to each lam to encode the receiver position and altitude.
+
+    Central receiver (rx_offset = 0): weights are ones (the plain J1 loop
+        integral, valid at the loop centre).
+    Offset receiver: weights are J0(lam * rx_offset), the additional Bessel
+        factor that moves the observation point off the loop axis.
+
+    Parameters
+    ----------
+    tx_radius : float    Tx loop radius [m]
+    h_base    : ndarray  Hankel abscissae
+    rx_offset : float    radial Tx-centre to Rx distance [m] (0.0 = centre)
+    altitude  : float    total elevation of Tx plus Rx above the ground [m].
+        A raised or airborne system continues the field upward through the
+        non-conductive air half-space, multiplying every wavenumber by
+        exp(-lam * altitude).  altitude = 0.0 reproduces the on-ground response.
+
+    Returns
+    -------
+    ndarray, shape (len(h_base),) : the per-wavenumber weights.
     """
     lam = h_base / float(tx_radius)
     if rx_offset == 0.0:
-        return np.ones(len(lam), dtype=float)
-    return j0(lam * float(rx_offset))
+        weights = np.ones(len(lam), dtype=float)
+    else:
+        weights = j0(lam * float(rx_offset))
+    if altitude != 0.0:
+        weights = weights * np.exp(-lam * float(altitude))
+    return weights
 
 
-def _build_square_geometry(side_length, n_quad, rx_x=0.0, rx_y=0.0,
+def _build_square_geometry(tx_side, n_quad, rx_x=0.0, rx_y=0.0,
                            use_symmetry=True):
     """
-    Build Gauss-Legendre quadrature nodes and weights for a square Tx loop.
-    Returns (offset_dist_q, area_w).
+    Build the Gauss-Legendre quadrature nodes and weights for a square Tx loop.
 
+    The square loop is modelled as a continuous area distribution of vertical
+    magnetic dipoles.  This routine returns, for each quadrature point, the
+    horizontal distance from that point to the receiver and the corresponding
+    area weight; the square kernel then sums area_w * G(dist) over all points.
+
+    Parameters
+    ----------
+    tx_side      : float  square Tx side length L [m]
+    n_quad       : int    Gauss-Legendre points per axis
+    rx_x, rx_y   : float  receiver coordinates [m] (offset case only)
+    use_symmetry : bool   see the two modes below
+
+    Modes
+    -----
     Central (use_symmetry=True):
-        Integrates over one quadrant [0, L/2]^2, exploiting x<->y symmetry.
-        The caller must multiply dbdt by 4 to account for all four quadrants.
+        Integrates over one quadrant [0, L/2]^2, exploiting the x<->y symmetry
+        of a centred receiver.  Off-diagonal node pairs (i != j) carry a factor
+        of 2 to cover their mirror image.  The caller must multiply the final
+        dbdt by 4 to account for all four quadrants.
 
     Offset (use_symmetry=False):
-        Integrates over the full square [-L/2, L/2]^2.
-        Distances clipped at 1e-6 m to avoid singularity when Rx is inside the loop.
+        Integrates over the full square [-L/2, L/2]^2 because an off-centre
+        receiver breaks the symmetry.  Distances are clipped at 1e-6 m to avoid
+        the 1/dist singularity when the receiver sits on a quadrature node.
+
+    Returns
+    -------
+    (dist_q, area_w) : ndarrays of equal length
+        dist_q : horizontal source-to-receiver distance at each node [m]
+        area_w : Gauss-Legendre area weight at each node
     """
-    L = float(side_length)
+    L = float(tx_side)
     hs = L / 2.0
     gl_nodes, gl_weights = np.polynomial.legendre.leggauss(n_quad)
 
     if use_symmetry:
         x_pts = hs / 2.0 * (1.0 + gl_nodes)
         w_pts = gl_weights * hs / 2.0
-        offset_dist_q, area_w = [], []
+        dist_q, area_w = [], []
         for i in range(n_quad):
             for jj in range(i, n_quad):
                 w = w_pts[i] * w_pts[jj] * (2.0 if i != jj else 1.0)
-                offset_dist_q.append(np.sqrt(x_pts[i]**2 + x_pts[jj]**2))
+                dist_q.append(np.sqrt(x_pts[i]**2 + x_pts[jj]**2))
                 area_w.append(w)
-        return np.asarray(offset_dist_q, dtype=float), np.asarray(area_w, dtype=float)
+        return np.asarray(dist_q, dtype=float), np.asarray(area_w, dtype=float)
     else:
         x_pts = hs * gl_nodes
         wx = hs * gl_weights
         xx, yy = np.meshgrid(x_pts, x_pts, indexing='xy')
         ww_x, ww_y = np.meshgrid(wx, wx, indexing='xy')
-        offset_dist_q = np.sqrt((xx.ravel() - rx_x)**2 + (yy.ravel() - rx_y)**2)
-        offset_dist_q = np.maximum(offset_dist_q, 1e-6)
-        return offset_dist_q, (ww_x * ww_y).ravel()
+        dist_q = np.sqrt((xx.ravel() - rx_x)**2 + (yy.ravel() - rx_y)**2)
+        dist_q = np.maximum(dist_q, 1e-6)
+        return dist_q, (ww_x * ww_y).ravel()
 
 
 # ============================================================================
@@ -188,7 +372,7 @@ def _build_square_geometry(side_length, n_quad, rx_x=0.0, rx_y=0.0,
 def _run_circular(times, thicknesses, resistivities,
                   tx_radius, extra_weights,
                   h_base, h_j1, f_base, f_sin, f_cos, e_eta, e_A,
-                  filter_wt, system_filter, signal, transform,
+                  filter_weights, system_filter, signal, transform,
                   use_numba, use_cuda, hankel_filter, fourier_filter):
     """
     Dispatch the circular-loop kernel to the best available backend.
@@ -208,17 +392,17 @@ def _run_circular(times, thicknesses, resistivities,
             return _tem_circular_euler_gpu(
                 times, thicknesses, resistivities, a,
                 d_extra, d_h_base, d_h_j1,
-                e_eta, e_A, filter_weights=filter_wt)
+                e_eta, e_A, filter_weights=filter_weights)
         else:
             return _tem_circular_gpu(
                 times, thicknesses, resistivities, a,
                 d_extra, d_h_base, d_h_j1, d_f_base, d_f_sin,
-                filter_weights=filter_wt)
+                filter_weights=filter_weights)
 
     # PATH 2: Numba JIT
     if HAS_NUMBA and use_numba and signal in (-1, 1):
         n_eval = len(f_base) if transform == 'dlf' else len(e_eta)
-        fw = filter_wt if filter_wt is not None else \
+        fw = filter_weights if filter_weights is not None else \
             np.ones((len(times), n_eval), dtype=np.complex128)
         if transform == 'euler':
             return _tem_circular_euler_jit(
@@ -239,39 +423,24 @@ def _run_circular(times, thicknesses, resistivities,
             hz *= system_filter(omega)
         return hz
 
-    dbdt = np.zeros(len(times))
-    if transform == 'euler':
-        n_eval = len(e_eta)
-        ks = np.arange(n_eval, dtype=float)
-        for i, t in enumerate(times):
-            c = e_A / (2.0 * t)
-            vals = np.array([np.real(MU0 * _hz_sec((c + k * np.pi / t * 1j) / 1j))
-                             for k in range(n_eval)])
-            dbdt[i] = np.exp(e_A / 2.0) / t * np.dot(e_eta * (-1.0)**ks, vals)
-    else:
-        for i, t in enumerate(times):
-            omega_pts = f_base / t
-            if signal in (-1, 1):
-                spectral = np.array([MU0 * np.imag(_hz_sec(w)) for w in omega_pts])
-                dbdt[i] = np.dot(spectral, f_sin) / t
-            else:  # impulse (signal=0)
-                spectral = np.array([np.real(-MU0 * 1j * w * _hz_sec(w))
-                                     for w in omega_pts])
-                dbdt[i] = np.dot(spectral, f_cos) / t
-    return dbdt
+    return _integrate_python(_hz_sec, times, signal, transform,
+                             f_base, f_sin, f_cos, e_eta, e_A)
 
 
 def _run_square(times, thicknesses, resistivities,
-                offset_dist_q, area_w,
+                dist_q, area_w,
                 h_base, h_j0, f_base, f_sin, f_cos, e_eta, e_A,
-                filter_wt, system_filter, signal, transform,
-                use_numba, use_cuda, hankel_filter, fourier_filter):
+                filter_weights, system_filter, signal, transform,
+                use_numba, use_cuda, hankel_filter, fourier_filter,
+                altitude=0.0):
     """
     Dispatch the square-loop (VMD area integral) kernel to the best backend.
 
     Returns dbdt before any quadrature scale factor, _apply_signal_scaling,
     and rx_fac. For fwd_square_central, multiply the result by 4 before
     calling _apply_signal_scaling to account for the one-quadrant integration.
+
+    altitude : total Tx+Rx elevation [m] (0.0 = on ground).
     """
     # PATH 1: CUDA GPU
     if HAS_CUDA and use_cuda and signal in (-1, 1):
@@ -280,60 +449,43 @@ def _run_square(times, thicknesses, resistivities,
         if transform == 'euler':
             return _tem_square_euler_gpu(
                 times, thicknesses, resistivities,
-                offset_dist_q, area_w, d_h_base, d_h_j0,
-                e_eta, e_A, filter_weights=filter_wt)
+                dist_q, area_w, d_h_base, d_h_j0,
+                e_eta, e_A, filter_weights=filter_weights, altitude=altitude)
         else:
             return _tem_square_gpu(
                 times, thicknesses, resistivities,
-                offset_dist_q, area_w, d_h_base, d_h_j0,
-                d_f_base, d_f_sin, filter_weights=filter_wt)
+                dist_q, area_w, d_h_base, d_h_j0,
+                d_f_base, d_f_sin, filter_weights=filter_weights, altitude=altitude)
 
     # PATH 2: Numba JIT
     if HAS_NUMBA and use_numba and signal in (-1, 1):
         n_eval = len(f_base) if transform == 'dlf' else len(e_eta)
-        fw = filter_wt if filter_wt is not None else \
+        fw = filter_weights if filter_weights is not None else \
             np.ones((len(times), n_eval), dtype=np.complex128)
         if transform == 'euler':
             return _tem_square_euler_jit(
                 times, thicknesses, resistivities,
-                offset_dist_q, area_w, MU0,
-                h_base, h_j0, e_eta, e_A, fw)
+                dist_q, area_w, MU0,
+                h_base, h_j0, e_eta, e_A, fw, altitude)
         else:
             return _tem_square_jit(
                 times, thicknesses, resistivities,
-                offset_dist_q, area_w, MU0,
-                h_base, h_j0, f_base, f_sin, fw)
+                dist_q, area_w, MU0,
+                h_base, h_j0, f_base, f_sin, fw, altitude)
 
     # PATH 3: Pure Python (also handles impulse, signal=0)
     def _hz_sec(omega):
         total = 0j
-        for q in range(len(offset_dist_q)):
+        for q in range(len(dist_q)):
             total += area_w[q] * _vmd_greenfct(
-                offset_dist_q[q], omega, thicknesses, resistivities, h_base, h_j0)
+                dist_q[q], omega, thicknesses, resistivities, h_base, h_j0,
+                altitude=altitude)
         if system_filter is not None:
             total *= system_filter(omega)
         return total
 
-    dbdt = np.zeros(len(times))
-    if transform == 'euler':
-        n_eval = len(e_eta)
-        ks = np.arange(n_eval, dtype=float)
-        for i, t in enumerate(times):
-            c = e_A / (2.0 * t)
-            vals = np.array([np.real(MU0 * _hz_sec((c + k * np.pi / t * 1j) / 1j))
-                             for k in range(n_eval)])
-            dbdt[i] = np.exp(e_A / 2.0) / t * np.dot(e_eta * (-1.0)**ks, vals)
-    else:
-        for i, t in enumerate(times):
-            omega_pts = f_base / t
-            if signal in (-1, 1):
-                spectral = np.array([MU0 * np.imag(_hz_sec(w)) for w in omega_pts])
-                dbdt[i] = np.dot(spectral, f_sin) / t
-            else:  # impulse (signal=0)
-                spectral = np.array([np.real(-MU0 * 1j * w * _hz_sec(w))
-                                     for w in omega_pts])
-                dbdt[i] = np.dot(spectral, f_cos) / t
-    return dbdt
+    return _integrate_python(_hz_sec, times, signal, transform,
+                             f_base, f_sin, f_cos, e_eta, e_A)
 
 
 # ============================================================================
@@ -344,7 +496,8 @@ def fwd_circle_central(thicknesses, resistivities, tx_radius, times,
                        current=1.0, signal=-1,
                        system_filter=None, use_numba=True, use_cuda=True,
                        rx_area=1.0, rx_turns=1,
-                       hankel_filter='key_201', fourier_filter='key_101',
+                       tx_height=0.0, rx_height=0.0,
+                       hankel_filter='key_101', fourier_filter='key_81',
                        transform='dlf', euler_order=11):
     """
     Central-loop TEM forward response for a 1-D layered earth.
@@ -366,7 +519,14 @@ def fwd_circle_central(thicknesses, resistivities, tx_radius, times,
     use_cuda      : bool, default True
     rx_area       : float, default 1.0        Rx area [m^2]
     rx_turns      : int, default 1            Rx turns
-    hankel_filter : str, default 'key_201'
+    tx_height     : float, default 0.0        Tx elevation above ground [m]
+    rx_height     : float, default 0.0        Rx elevation above ground [m]
+        Tx and Rx heights are summed into a single air gap altitude =
+        tx_height + rx_height.  The field travels down through tx_height to
+        reach the earth and back up through rx_height to the receiver, so the
+        two non-conductive air paths combine into one exp(-lam*altitude)
+        upward-continuation factor (exponents of the same base add).
+    hankel_filter : str, default 'key_101'
     fourier_filter: str, default 'key_81'
     transform     : str, default 'dlf'        'dlf' or 'euler'
     euler_order   : int, default 11
@@ -380,22 +540,18 @@ def fwd_circle_central(thicknesses, resistivities, tx_radius, times,
     times = np.asarray(times, dtype=float)
     transform = transform.lower()
     rx_fac = _rx_scale(rx_area, rx_turns)
+    altitude = float(tx_height) + float(rx_height)
 
     h_base, h_j0, h_j1, f_base, f_sin, f_cos, e_eta, e_A = \
         _resolve_filters(hankel_filter, fourier_filter, transform, euler_order)
 
-    if system_filter is not None:
-        filter_wt = _precompute_filter_dlf(system_filter, times, f_base) \
-            if transform == 'dlf' else \
-            _precompute_filter_euler(system_filter, times, e_eta, e_A)
-    else:
-        filter_wt = None
+    filter_weights = _filter_weights(system_filter, times, transform, f_base, e_eta, e_A)
 
-    extra_weights = _build_circular_geometry(tx_radius, h_base)
+    extra_weights = _build_circular_geometry(tx_radius, h_base, altitude=altitude)
     dbdt = _run_circular(times, thicknesses, resistivities,
                          tx_radius, extra_weights,
                          h_base, h_j1, f_base, f_sin, f_cos, e_eta, e_A,
-                         filter_wt, system_filter, signal, transform,
+                         filter_weights, system_filter, signal, transform,
                          use_numba, use_cuda, hankel_filter, fourier_filter)
     _apply_signal_scaling(dbdt, current, signal, transform)
     return dbdt * rx_fac
@@ -405,7 +561,8 @@ def fwd_circle_offset(thicknesses, resistivities, tx_radius, rx_offset,
                       times, current=1.0, signal=-1,
                       system_filter=None, use_numba=True, use_cuda=True,
                       rx_area=1.0, rx_turns=1,
-                      hankel_filter='key_201', fourier_filter='key_101',
+                      tx_height=0.0, rx_height=0.0,
+                      hankel_filter='key_101', fourier_filter='key_81',
                       transform='dlf', euler_order=11):
     """
     Offset-loop TEM forward response for a 1-D layered earth.
@@ -420,6 +577,8 @@ def fwd_circle_offset(thicknesses, resistivities, tx_radius, rx_offset,
     tx_radius     : float   Tx loop radius [m]
     rx_offset     : float   Radial Tx-centre to Rx distance [m]
     times         : array-like, shape (n_t,)
+    tx_height     : float, default 0.0  Tx elevation above ground [m]
+    rx_height     : float, default 0.0  Rx elevation above ground [m]
     current, signal, system_filter, use_numba, use_cuda,
     rx_area, rx_turns, hankel_filter, fourier_filter,
     transform, euler_order : see fwd_circle_central
@@ -433,34 +592,32 @@ def fwd_circle_offset(thicknesses, resistivities, tx_radius, rx_offset,
     times = np.asarray(times, dtype=float)
     transform = transform.lower()
     rx_fac = _rx_scale(rx_area, rx_turns)
+    altitude = float(tx_height) + float(rx_height)
 
     h_base, h_j0, h_j1, f_base, f_sin, f_cos, e_eta, e_A = \
         _resolve_filters(hankel_filter, fourier_filter, transform, euler_order)
 
-    if system_filter is not None:
-        filter_wt = _precompute_filter_dlf(system_filter, times, f_base) \
-            if transform == 'dlf' else \
-            _precompute_filter_euler(system_filter, times, e_eta, e_A)
-    else:
-        filter_wt = None
+    filter_weights = _filter_weights(system_filter, times, transform, f_base, e_eta, e_A)
 
     extra_weights = _build_circular_geometry(tx_radius, h_base,
-                                             rx_offset=float(rx_offset))
+                                             rx_offset=float(rx_offset),
+                                             altitude=altitude)
     dbdt = _run_circular(times, thicknesses, resistivities,
                          tx_radius, extra_weights,
                          h_base, h_j1, f_base, f_sin, f_cos, e_eta, e_A,
-                         filter_wt, system_filter, signal, transform,
+                         filter_weights, system_filter, signal, transform,
                          use_numba, use_cuda, hankel_filter, fourier_filter)
     _apply_signal_scaling(dbdt, current, signal, transform)
     return dbdt * rx_fac
 
 
-def fwd_square_central(thicknesses, resistivities, side_length, times,
+def fwd_square_central(thicknesses, resistivities, tx_side, times,
                        current=1.0, signal=-1,
                        system_filter=None, n_quad=5, use_numba=True,
                        use_cuda=True, use_symmetry=True,
                        rx_area=1.0, rx_turns=1,
-                       hankel_filter='key_201', fourier_filter='key_101',
+                       tx_height=0.0, rx_height=0.0,
+                       hankel_filter='key_101', fourier_filter='key_81',
                        transform='dlf', euler_order=11):
     """
     Central square-loop TEM forward response for a 1-D layered earth.
@@ -473,9 +630,11 @@ def fwd_square_central(thicknesses, resistivities, side_length, times,
     thicknesses, resistivities, times, current, signal,
     system_filter, use_numba, use_cuda, rx_area, rx_turns,
     hankel_filter, fourier_filter, transform, euler_order : see fwd_circle_central
-    side_length   : float  square Tx side length [m]
+    tx_side   : float  square Tx side length [m]
     n_quad        : int    GL quadrature points per axis (default 5)
     use_symmetry  : bool   exploit x<->y symmetry within quadrant (default True)
+    tx_height     : float, default 0.0  Tx elevation above ground [m]
+    rx_height     : float, default 0.0  Rx elevation above ground [m]
 
     Returns
     -------
@@ -486,24 +645,21 @@ def fwd_square_central(thicknesses, resistivities, side_length, times,
     times = np.asarray(times, dtype=float)
     transform = transform.lower()
     rx_fac = _rx_scale(rx_area, rx_turns)
+    altitude = float(tx_height) + float(rx_height)
 
     h_base, h_j0, h_j1, f_base, f_sin, f_cos, e_eta, e_A = \
         _resolve_filters(hankel_filter, fourier_filter, transform, euler_order)
 
-    if system_filter is not None:
-        filter_wt = _precompute_filter_dlf(system_filter, times, f_base) \
-            if transform == 'dlf' else \
-            _precompute_filter_euler(system_filter, times, e_eta, e_A)
-    else:
-        filter_wt = None
+    filter_weights = _filter_weights(system_filter, times, transform, f_base, e_eta, e_A)
 
-    offset_dist_q, area_w = _build_square_geometry(
-        side_length, n_quad, use_symmetry=use_symmetry)
+    dist_q, area_w = _build_square_geometry(
+        tx_side, n_quad, use_symmetry=use_symmetry)
     dbdt = _run_square(times, thicknesses, resistivities,
-                       offset_dist_q, area_w,
+                       dist_q, area_w,
                        h_base, h_j0, f_base, f_sin, f_cos, e_eta, e_A,
-                       filter_wt, system_filter, signal, transform,
-                       use_numba, use_cuda, hankel_filter, fourier_filter)
+                       filter_weights, system_filter, signal, transform,
+                       use_numba, use_cuda, hankel_filter, fourier_filter,
+                       altitude=altitude)
 
     # One-quadrant integration: multiply by 4 to recover the full loop response.
     dbdt *= 4.0
@@ -511,12 +667,13 @@ def fwd_square_central(thicknesses, resistivities, side_length, times,
     return dbdt * rx_fac
 
 
-def fwd_square_offset(thicknesses, resistivities, side_length,
+def fwd_square_offset(thicknesses, resistivities, tx_side,
                       rx_x, rx_y, times,
                       current=1.0, signal=-1,
                       system_filter=None, n_quad=11, use_numba=True,
                       use_cuda=True, rx_area=1.0, rx_turns=1,
-                      hankel_filter='key_201', fourier_filter='key_101',
+                      tx_height=0.0, rx_height=0.0,
+                      hankel_filter='key_101', fourier_filter='key_81',
                       transform='dlf', euler_order=11):
     """
     Square-loop TEM response at an arbitrary receiver position (rx_x, rx_y).
@@ -528,10 +685,12 @@ def fwd_square_offset(thicknesses, resistivities, side_length,
     thicknesses, resistivities, times, current, signal,
     system_filter, use_numba, use_cuda, rx_area, rx_turns,
     hankel_filter, fourier_filter, transform, euler_order : see fwd_circle_central
-    side_length : float  square Tx side length [m]
+    tx_side : float  square Tx side length [m]
     rx_x        : float  Rx x-coordinate [m]
     rx_y        : float  Rx y-coordinate [m]
     n_quad      : int    GL quadrature points per axis (default 11)
+    tx_height   : float, default 0.0  Tx elevation above ground [m]
+    rx_height   : float, default 0.0  Rx elevation above ground [m]
 
     Returns
     -------
@@ -542,25 +701,22 @@ def fwd_square_offset(thicknesses, resistivities, side_length,
     times = np.asarray(times, dtype=float)
     transform = transform.lower()
     rx_fac = _rx_scale(rx_area, rx_turns)
+    altitude = float(tx_height) + float(rx_height)
 
     h_base, h_j0, h_j1, f_base, f_sin, f_cos, e_eta, e_A = \
         _resolve_filters(hankel_filter, fourier_filter, transform, euler_order)
 
-    if system_filter is not None:
-        filter_wt = _precompute_filter_dlf(system_filter, times, f_base) \
-            if transform == 'dlf' else \
-            _precompute_filter_euler(system_filter, times, e_eta, e_A)
-    else:
-        filter_wt = None
+    filter_weights = _filter_weights(system_filter, times, transform, f_base, e_eta, e_A)
 
-    offset_dist_q, area_w = _build_square_geometry(
-        side_length, n_quad, rx_x=float(rx_x), rx_y=float(rx_y),
+    dist_q, area_w = _build_square_geometry(
+        tx_side, n_quad, rx_x=float(rx_x), rx_y=float(rx_y),
         use_symmetry=False)
     dbdt = _run_square(times, thicknesses, resistivities,
-                       offset_dist_q, area_w,
+                       dist_q, area_w,
                        h_base, h_j0, f_base, f_sin, f_cos, e_eta, e_A,
-                       filter_wt, system_filter, signal, transform,
-                       use_numba, use_cuda, hankel_filter, fourier_filter)
+                       filter_weights, system_filter, signal, transform,
+                       use_numba, use_cuda, hankel_filter, fourier_filter,
+                       altitude=altitude)
     _apply_signal_scaling(dbdt, current, signal, transform)
     return dbdt * rx_fac
 
@@ -570,8 +726,23 @@ def fwd_square_offset(thicknesses, resistivities, side_length,
 # ============================================================================
 
 def fwd_analytical_central(resistivity, tx_radius, times, current=1.0):
-    """Analytical dBz/dt at centre of a loop on a homogeneous half-space.
-    Ward & Hohmann (1988), eq 4.69a.  Returns V/m^2."""
+    """Analytical central-loop dBz/dt over a homogeneous half-space.
+
+    Closed-form reference solution (Ward & Hohmann, 1988, eq 4.69a) for the
+    vertical field decay at the centre of a circular loop on a uniform earth.
+    Useful for validating the layered forward model in the single-layer limit.
+
+    Parameters
+    ----------
+    resistivity : float    half-space resistivity [Ohm.m]
+    tx_radius   : float    Tx loop radius [m]
+    times       : array-like  gate times [s]
+    current     : float, default 1.0  Tx current [A]
+
+    Returns
+    -------
+    dbdt : ndarray, shape (n_t,)  dBz/dt [V/m^2]
+    """
     times = np.asarray(times, dtype=float)
     sigma = 1.0 / resistivity
     a = float(tx_radius)
@@ -588,9 +759,26 @@ def fwd_analytical_central(resistivity, tx_radius, times, current=1.0):
 
 def fwd_analytical_offset(resistivity, tx_radius, rx_offset, times,
                                    current=1.0):
-    """Analytical dBz/dt at radial offset from a VMD on a homogeneous half-space.
-    Ward & Hohmann (1988), eq 4.97 differentiated w.r.t. time.
-    Valid in the far field (rx_offset >> tx_radius).  Returns V/m^2."""
+    """Analytical offset dBz/dt over a homogeneous half-space (far field).
+
+    Closed-form reference solution (Ward & Hohmann, 1988, eq 4.97, differen-
+    tiated with respect to time) for the vertical field at a radial offset from
+    a vertical magnetic dipole on a uniform earth.  The loop is treated as a
+    point dipole of moment M = current * pi * tx_radius^2, so the result is
+    valid only in the far field where rx_offset >> tx_radius.
+
+    Parameters
+    ----------
+    resistivity : float    half-space resistivity [Ohm.m]
+    tx_radius   : float    Tx loop radius [m] (sets the dipole moment)
+    rx_offset   : float    radial Tx-centre to Rx distance [m]
+    times       : array-like  gate times [s]
+    current     : float, default 1.0  Tx current [A]
+
+    Returns
+    -------
+    dbdt : ndarray, shape (n_t,)  dBz/dt [V/m^2]
+    """
     times = np.asarray(times, dtype=float)
     sigma = 1.0 / resistivity
     r = float(rx_offset)

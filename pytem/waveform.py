@@ -1,11 +1,11 @@
 """
-waveform.py — Waveform convolution for piecewise-linear transmitter waveforms.
+waveform.py - Waveform convolution for piecewise-linear transmitter waveforms.
 
 Contains:
-  setup_waveform         — precompute quadrature structure (empymod-style)
-  convolve_waveform      — public API (dispatches to Numba JIT when available)
-  _log_interp_scalar     — Numba JIT log-time interpolation
-  _convolve_waveform_jit — Numba JIT inner loops
+  setup_waveform         - precompute quadrature structure (empymod-style)
+  convolve_waveform      - public API (dispatches to Numba JIT when available)
+  _log_interp_scalar     - Numba JIT log-time interpolation
+  _convolve_waveform_jit - Numba JIT inner loops
 """
 
 import numpy as np
@@ -112,7 +112,7 @@ def setup_waveform(gate_times, waveform_times, waveform_currents, n_quad=8):
     n_active = t0.size
 
     if n_active == 0:
-        # No ramp segments: waveform is constant — return zeros.
+        # No ramp segments: waveform is constant - return zeros.
         def apply_waveform(step_resp):
             sr = np.asarray(step_resp)
             if sr.ndim == 1:
@@ -140,7 +140,7 @@ def setup_waveform(gate_times, waveform_times, waveform_currents, n_quad=8):
     # Replace invalid times with zero so np.unique works cleanly
     comp_time_safe = np.where(valid3, comp_time, 0.0)
 
-    # Deduplicate — same approach as empymod
+    # Deduplicate - same approach as empymod
     comp_times_flat, map_time = np.unique(comp_time_safe[valid3], return_inverse=True)
 
     # Clamp to a minimum time so the forward model is never called at
@@ -197,7 +197,7 @@ def convolve_waveform(step_times, step_response, waveform_times,
         return _convolve_waveform_jit(gate_times, wf_t, wf_I,
                                       log_st, sr, gl_nodes, gl_weights)
 
-    # Vectorised NumPy fallback — empymod-style (Key, DIPOLE1D).
+    # Vectorised NumPy fallback - empymod-style (Key, DIPOLE1D).
     # Reference: empymod.utils.check_waveform
     #
     # Strategy: pre-compute all GL quadrature delay times for every
@@ -253,5 +253,5 @@ def convolve_waveform(step_times, step_response, waveform_times,
 
     resp = resp_flat.reshape(comp_time.shape)   # (n_gates, n_seg, n_quad)
 
-    # Weighted sum: result[j] = Σ_{k,q}  seg_w[j,k] * gl_weights[q] * resp[j,k,q]
+    # Weighted sum: result[j] = sum_{k,q}  seg_w[j,k] * gl_weights[q] * resp[j,k,q]
     return np.einsum('jk,q,jkq->j', seg_w, gl_weights, resp)
