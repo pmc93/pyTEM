@@ -108,7 +108,7 @@ st.subheader("1. The measured soundings")
 tab_tem, tab_ves = st.tabs(["🧲 TEM", "⚡️ VES"])
 
 with tab_tem:
-    fig_d, ax_d = plt.subplots(figsize=(7, 4.5))
+    fig_d, ax_d = plt.subplots(figsize=(12, 5))
     ax_d.plot(times, dbdt_obs, "o-", ms=5, color="steelblue", lw=1.5, label="Field data")
     ax_d.set_xscale("log")
     ax_d.set_yscale("log")
@@ -126,7 +126,7 @@ with tab_tem:
     )
 
 with tab_ves:
-    fig_v, ax_v = plt.subplots(figsize=(7, 4.5))
+    fig_v, ax_v = plt.subplots(figsize=(12, 5))
     ax_v.plot(ab2, rhoa_obs, "o-", ms=5, color="darkorange", lw=1.5, label="Field data")
     ax_v.set_xscale("log")
     ax_v.set_yscale("log")
@@ -241,7 +241,7 @@ if "wa_result" in st.session_state and "wa_result_ves" in st.session_state:
     m4.metric("VES iterations", len(rms_hist_v))
 
     # -- Combined recovered models + data fits ---------------------------------
-    fig = plt.figure(figsize=(13, 11))
+    fig = plt.figure(figsize=(12, 12))
     gs = fig.add_gridspec(2, 2, hspace=0.32, wspace=0.3)
     ax_model = fig.add_subplot(gs[:, 0])
     ax_tem = fig.add_subplot(gs[0, 1])
@@ -391,10 +391,5 @@ if st.button("Check my answers", key="fe_quiz_check"):
     st.metric("Your score", f"{_score} / {len(_FE_QUIZ)}")
     if _score == len(_FE_QUIZ):
         st.balloons()
-
-st.divider()
-st.caption(
-    "Synthetic field dataset for teaching purposes; not from a real survey."
-)
 
 render_footer()
