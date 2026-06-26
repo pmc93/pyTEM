@@ -6,8 +6,8 @@ import matplotlib.pyplot as plt
 # -- Matplotlib font sizes (mobile-friendly) --------------------------
 plt.rcParams.update({
     "font.size":       16,
-    "axes.labelsize":  18,
-    "axes.titlesize":  18,
+    "axes.labelsize":  16,
+    "axes.titlesize":  16,
     "xtick.labelsize": 16,
     "ytick.labelsize": 16,
     "legend.fontsize": 16,
@@ -43,11 +43,11 @@ def _model_ui(n):
         st.markdown(f"**{label}**")
         if i < n - 1:
             h_def = defaults_h[i] if i < len(defaults_h) else 20
-            h_out.append(float(st.slider(f"Thickness (m)", 1, 500, h_def,
+            h_out.append(float(st.slider(f"Thickness [m]", 1, 500, h_def,
                                          key=f"jac_h{i}")))
         rho_def = defaults_rho[i] if i < len(defaults_rho) else 100
         rho_def = min(_RHO, key=lambda x: abs(x - rho_def))
-        r_out.append(float(st.select_slider(f"Resistivity (Ohm.m)", _RHO, value=rho_def,
+        r_out.append(float(st.select_slider(f"Resistivity [Ohm.m]", _RHO, value=rho_def,
                                             key=f"jac_r{i}")))
     return h_out, r_out
 
@@ -88,11 +88,13 @@ st.markdown(
     Increasing electrode spacing AB/2 samples progressively greater depth.
     The data are plotted as apparent resistivity $\rho_a$ vs AB/2 on a log-log scale.
 
-    The **Jacobian** $J_{ij}$ is the sensitivity of data point $i$ to layer $j$:
-    a large $|J_{ij}|$ means that data point carries information about that layer.
+    The **Jacobian** $J_{ij}$ is the sensitivity of data point $i$ to the resistivity of 
+    model layer $j$:
+    a large $|J_{ij}|$ means that data point carries information about that layer resistivity.
     Red cells mean increasing the layer's resistivity raises the data value; blue means the opposite.
-    The **column norm** (bar chart) is the total sensitivity across all data points for each layer
-    -- a small bar means the layer is poorly constrained by the data.
+    The **layer sensitivity**
+    summarizes total sensitivity for each layer:
+    a small bar means the layer is poorly constrained by the data.
     """
 )
 
@@ -106,15 +108,15 @@ with st.expander("TEM & VES survey settings", expanded=False):
     col_tem_s, col_ves_s = st.columns(2)
     with col_tem_s:
         st.markdown("**TEM**")
-        tx_side = st.number_input("Tx loop side length (m)", min_value=5, max_value=500, value=40, step=5, key="jac_tem_side")
+        tx_side = st.number_input("Tx loop side length [m]", min_value=5, max_value=500, value=40, step=5, key="jac_tem_side")
         tx_r    = float(np.sqrt(tx_side ** 2 / np.pi))
-        t_min = st.slider("Earliest gate (10^x s)", -6.0, -4.0, -5.0, 0.25, key="jac_tem_tmin")
-        t_max = st.slider("Latest gate (10^x s)",   -3.0, -1.0, -2.0, 0.25, key="jac_tem_tmax")
+        t_min = st.slider("Earliest gate [log10(s)]", -6.0, -4.0, -5.0, 0.25, key="jac_tem_tmin")
+        t_max = st.slider("Latest gate [log10(s)]",   -3.0, -1.0, -2.0, 0.25, key="jac_tem_tmax")
         filt_tem = "key_101"
     with col_ves_s:
         st.markdown("**VES**")
-        ab2_min = st.slider("AB/2 minimum (m)",   1,    50,   1,   key="jac_ves_ab2min")
-        ab2_max = st.slider("AB/2 maximum (m)",  50,  2000, 300,   key="jac_ves_ab2max")
+        ab2_min = st.slider("AB/2 minimum [m]",   1,    50,   1,   key="jac_ves_ab2min")
+        ab2_max = st.slider("AB/2 maximum [m]",  50,  2000, 300,   key="jac_ves_ab2max")
         filt_ves = "gs11"
 
 # -- Compute -------------------------------------------------------------------
@@ -127,19 +129,19 @@ with st.spinner("Computing Jacobians ..."):
     rhoap, J_ves_raw     = _ves_jac(tuple(ab2.tolist()), tuple(rho), tuple(thick), filt_ves)
 
 N = len(rho)
-J_ves = J_ves_raw[:, :N] * np.array(rho)[None, :] / rhoap[:, None]   # relative Jacobian
+J_ves = J_ves_raw[:, :N]
 
 # -- Plots: two rows, each rendered as a separate figure for mobile -----------
 layer_lbls = [f"L{i+1}\n{rho[i]:.0f}" for i in range(N)]
 
 # TEM row
-fig_tem, axes_tem = plt.subplots(1, 3, figsize=(13, 4))
-fig_tem.subplots_adjust(wspace=0.4)
+fig_tem, axes_tem = plt.subplots(1, 3, figsize=(14, 4.8))
+fig_tem.subplots_adjust(wspace=0.45, bottom=0.2)
 
 ax = axes_tem[0]
-ax.loglog(times * 1e3, dbdt, "o-", color="steelblue", ms=5, lw=1.5)
-ax.set_xlabel("Time (ms)")
-ax.set_ylabel(r"$|\partial B_z/\partial t|$ (V/m$^2$)")
+ax.loglog(times, dbdt, "o-", color="steelblue", ms=5, lw=1.5)
+ax.set_xlabel("Time [s]")
+ax.set_ylabel(r"|dB/dt| [V/m$^2$]")
 ax.set_title("TEM - decay curve")
 ax.grid(True, which="both", ls="--", alpha=0.4)
 
@@ -150,15 +152,15 @@ ax.set_xticks(range(N))
 ax.set_xticklabels(layer_lbls)
 t_ticks = list(range(0, _N_DATA, max(1, _N_DATA // 5)))
 ax.set_yticks(t_ticks)
-ax.set_yticklabels([f"{times[k]*1e3:.2f} ms" for k in t_ticks])
+ax.set_yticklabels([f"{k + 1}" for k in t_ticks])
 ax.set_xlabel("Layer")
-ax.set_ylabel("Time gate")
+ax.set_ylabel("Data index [-]")
 ax.set_title("TEM Jacobian")
 plt.colorbar(im, ax=ax)
 
 ax = axes_tem[2]
 ax.bar(layer_lbls, np.linalg.norm(J_tem, axis=0), color="steelblue", alpha=0.8)
-ax.set_ylabel("Column norm")
+ax.set_ylabel("Layer sensitivity [-]")
 ax.set_title("TEM - sensitivity per layer")
 ax.grid(axis="y", ls="--", alpha=0.4)
 
@@ -166,8 +168,8 @@ st.pyplot(fig_tem)
 plt.close(fig_tem)
 
 # VES row
-fig_ves, axes_ves = plt.subplots(1, 3, figsize=(13, 4))
-fig_ves.subplots_adjust(wspace=0.4)
+fig_ves, axes_ves = plt.subplots(1, 3, figsize=(14, 4.8))
+fig_ves.subplots_adjust(wspace=0.45, bottom=0.2)
 
 ax = axes_ves[0]
 _span_ves = np.log10(rhoap.max()) - np.log10(rhoap.min())
@@ -175,8 +177,8 @@ _ctr_ves  = (np.log10(rhoap.max()) + np.log10(rhoap.min())) / 2
 if _span_ves < 2.5:
     ax.set_ylim(10 ** (_ctr_ves - 1.25), 10 ** (_ctr_ves + 1.25))
 ax.loglog(ab2, rhoap, "o-", color="darkorange", ms=5, lw=1.5)
-ax.set_xlabel("AB/2 (m)")
-ax.set_ylabel("Apparent resistivity (Ohm.m)")
+ax.set_xlabel("AB/2 [m]")
+ax.set_ylabel("Apparent resistivity [Ohm.m]")
 ax.set_title("VES - sounding curve")
 ax.grid(True, which="both", ls="--", alpha=0.4)
 
@@ -187,15 +189,15 @@ ax.set_xticks(range(N))
 ax.set_xticklabels(layer_lbls)
 ab2_ticks = list(range(0, _N_DATA, max(1, _N_DATA // 5)))
 ax.set_yticks(ab2_ticks)
-ax.set_yticklabels([f"{ab2[k]:.1f} m" for k in ab2_ticks], fontsize=10)
+ax.set_yticklabels([f"{k + 1}" for k in ab2_ticks])
 ax.set_xlabel("Layer")
-ax.set_ylabel("AB/2 spacing")
-ax.set_title("VES Jacobian (relative)")
+ax.set_ylabel("Data index [-]")
+ax.set_title("VES Jacobian")
 plt.colorbar(im, ax=ax)
 
 ax = axes_ves[2]
 ax.bar(layer_lbls, np.linalg.norm(J_ves, axis=0), color="darkorange", alpha=0.8)
-ax.set_ylabel("Column norm")
+ax.set_ylabel("Layer sensitivity [-]")
 ax.set_title("VES - sensitivity per layer")
 ax.grid(axis="y", ls="--", alpha=0.4)
 
@@ -204,7 +206,7 @@ plt.close(fig_ves)
 
 st.caption(
     "Red = increasing resistivity raises the data value; blue = opposite. "
-    "Column norm = total information a layer contributes across all data points."
+    "Layer sensitivity = total information a layer contributes across all data points."
 )
 
 with st.expander(":green[Check your understanding -- quiz]"):
@@ -222,7 +224,7 @@ with st.expander(":green[Check your understanding -- quiz]"):
             st.error("Think about how the EM field diffuses into the ground over time.")
     with col2:
         qb = st.radio(
-            ":red[**What does a small column norm mean for a layer?**]",
+            ":red[**What does small layer sensitivity mean for a layer?**]",
             ["The layer is very resistive",
              "The layer is poorly constrained by the data",
              "The layer is too thin to detect",
@@ -230,27 +232,27 @@ with st.expander(":green[Check your understanding -- quiz]"):
             index=None, key="jac_q2",
         )
         if qb == "The layer is poorly constrained by the data":
-            st.success("Correct! A small column norm means few data points respond to that layer, so it cannot be recovered reliably.")
+            st.success("Correct! Small layer sensitivity means few data points respond to that layer, so it cannot be recovered reliably.")
         elif qb is not None:
-            st.error("The column norm is a measure of how much information the data carries about a given layer.")
+            st.error("Layer sensitivity measures how much information the data carries about a given layer.")
 
     col3, col4 = st.columns(2)
     with col3:
         qc = st.radio(
             ":red[**A buried conductive layer in the TEM Jacobian usually shows...**]",
-            ["A large column norm (strong sensitivity)",
-             "A near-zero column norm",
+            ["Large layer sensitivity (strong sensitivity)",
+             "Near-zero layer sensitivity",
              "Sensitivity only at the earliest gate",
              "No effect on the data"],
             index=None, key="jac_q3",
         )
-        if qc == "A large column norm (strong sensitivity)":
+        if qc == "Large layer sensitivity (strong sensitivity)":
             st.success("Correct! Conductors carry strong induced currents, so they imprint clearly on the TEM data and are well resolved.")
         elif qc is not None:
             st.error("Recall that TEM is most sensitive to conductive layers.")
     with col4:
         qd = st.radio(
-            ":red[**Which method gives a resistive layer the larger column norm?**]",
+            ":red[**Which method gives a resistive layer larger layer sensitivity?**]",
             ["VES", "TEM", "Neither sees it"],
             index=None, key="jac_q4",
         )

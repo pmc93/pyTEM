@@ -6,8 +6,8 @@ import matplotlib.pyplot as plt
 # -- Matplotlib font sizes (mobile-friendly) --------------------------
 plt.rcParams.update({
     "font.size":       16,
-    "axes.labelsize":  18,
-    "axes.titlesize":  18,
+    "axes.labelsize":  16,
+    "axes.titlesize":  16,
     "xtick.labelsize": 16,
     "ytick.labelsize": 16,
     "legend.fontsize": 16,
@@ -171,7 +171,7 @@ def _plot_data(clean, noisy):
         axt.errorbar(_t, np.abs(noisy["dbdt_obs"]), yerr=noisy["noise_std"],
                      fmt="o", color="black", ms=4, ecolor="gray", elinewidth=1,
                      capsize=2, label="Noisy", zorder=4)
-        axt.loglog(_t, noisy["noise_std"], "--", color="red", lw=1.3,
+        axt.loglog(_t, noisy["noise_std"], "--", color="steelblue", lw=1.3,
                    label="Noise floor", zorder=3)
         axv.errorbar(_a, noisy["rhoa_obs"], yerr=noisy["rhoa_sigma"],
                      fmt="o", color="black", ms=4, ecolor="gray", elinewidth=1,
@@ -269,13 +269,13 @@ def _run_inv(dbdt_obs_t, noise_std_t, times_t, tx_r,
     res_tem = tem_invert(
         obs_data=dbdt_obs, thicknesses=thick_tem,
         log_resistivities=log_rho_tem, tx_size=tx_r, times=times,
-        noise_std=noise_std, alpha_steps=10, maxit=15,
+        noise_std=noise_std, alpha_steps=10, maxit=50,
         max_noise_frac=0.0,
         transform="dlf", hankel_filter="key_101", fourier_filter="key_81",
         analytical_j=True,
     )
     dbdt_pred = -fwd_circle_central(
-        thick_tem, res_tem["resistivities"].tolist(), tx_radius=tx_r, times=times
+        thick_tem, res_tem["resistivities"].tolist(), tx_radius=tx_r, times=times,
     )
 
     # --- VES inversion --------------------------------------------------------
@@ -286,7 +286,7 @@ def _run_inv(dbdt_obs_t, noise_std_t, times_t, tx_r,
     res_ves = ves_invert(
         ab2=ab2, rhoap_obs=rhoa_obs,
         resistivities=rho0_ves, thicknesses=thick_ves,
-        regularization="auto", iter_max=15, filter_set=_VES_FILTER,
+        regularization="auto", iter_max=50, filter_set=_VES_FILTER,
         fix_thicknesses=True, noise_frac=ves_frac,
     )
 
@@ -343,7 +343,7 @@ ax_model    = fig.add_subplot(gs[1:, :])
 ax = ax_tem_data
 ax.loglog(times, np.abs(dbdt_pred), color="steelblue", linestyle="-", lw=1.5, label="Predicted TEM", zorder=3)
 ax.loglog(times, np.abs(dbdt_obs),  color="black", marker="o", linestyle="None", ms=4,   label="Observed TEM", zorder=4)
-ax.loglog(times, noisy["noise_std"], "--", color="red", lw=1.2, label="Noise floor", zorder=2)
+#ax.loglog(times, noisy["noise_std"], "--", color="steelblue", lw=1.2, label="Noise floor", zorder=2)
 ax.set_xlabel("Time [s]")
 ax.set_ylabel(r"|dB/dt| [V/m$^2$]")
 ax.grid(True, which="both", ls="--", alpha=0.4)

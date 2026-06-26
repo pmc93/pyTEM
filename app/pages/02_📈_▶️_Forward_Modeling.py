@@ -77,23 +77,15 @@ st.header(":blue[Predicted response for a layered earth model]")
 st.markdown(
     "Build a layered resistivity model and see the predicted sounding curve "
     "update in real time. Each tab is independent; you can explore different "
-    "models for TEM and VES. In both cases a 100 Ohm.m reference is included."
+    "models for TEM and VES. In both cases a 100 Ohm.m is included for reference."
 )
 
 with st.expander("Why forward modelling?", expanded=False):
     st.markdown(
         """
-        **Forward modelling** answers the question: *if the ground really had this
-        resistivity structure, what would the instrument measure?* It is the engine
-        inside every inversion, and on its own it builds the intuition you need to
-        interpret real data:
-
-        - **Survey design** - check whether your chosen time gates or electrode
-          spacings actually "see" the target depth before going to the field.
-        - **Feasibility** - if a thin aquifer barely changes the predicted curve, no
-          inversion will recover it reliably either.
-        - **Intuition** - watch how making a layer thinner, deeper, or more
-          conductive reshapes the sounding curve.
+        **Forward modelling** addresses the question: *if the ground had this
+        resistivity structure, what would the instrument measure?* It is the numerical engine
+        inside every inversion. 
 
         Move the sliders below and watch the left panel (the measured curve) respond
         to the right panel (your model).
@@ -115,8 +107,26 @@ with tab_tem:
         tx_r = float(np.sqrt(tx_side ** 2 / np.pi))
         n_t = int(st.number_input("Time gates", 5, 50, 25, key="fwd_tem_nt"))
     with col_s2:
-        t_min = st.slider("log₁₀(Early time [s])", -6.0, -4.0, -5.0, 0.25, key="fwd_tem_tmin")
-        t_max = st.slider("log₁₀(Late time [s])", -3.0, -1.0, -2.0, 0.25, key="fwd_tem_tmax")
+        st.markdown("log<sub>10</sub>(Early time [s])", unsafe_allow_html=True)
+        t_min = st.slider(
+            "Early time [s]",
+            -6.0,
+            -4.0,
+            -5.0,
+            0.25,
+            key="fwd_tem_tmin",
+            label_visibility="collapsed",
+        )
+        st.markdown("log<sub>10</sub>(Late time [s])", unsafe_allow_html=True)
+        t_max = st.slider(
+            "Late time [s]",
+            -3.0,
+            -1.0,
+            -2.0,
+            0.25,
+            key="fwd_tem_tmax",
+            label_visibility="collapsed",
+        )
 
     st.markdown("**Layer model**")
     n_tem = int(st.number_input("Number of layers", 2, 6, 3, key="fwd_tem_n"))
@@ -134,13 +144,13 @@ with tab_tem:
 
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
 
-        ax1.loglog(times * 1e3, dbdt_ref, "--", color="black", lw=1.5,
+        ax1.loglog(times, dbdt_ref, "--", color="black", lw=1.5,
                    label="Homogeneous 100 Ohm.m", zorder=1)
-        ax1.loglog(times * 1e3, dbdt, "o-", color="steelblue", ms=4, lw=1.5,
+        ax1.loglog(times, dbdt, "o-", color="steelblue", ms=4, lw=1.5,
                    label="Layered model", zorder=2)
-        ax1.set_xlabel("Time (ms)")
+        ax1.set_xlabel("Time [s]")
         ax1.set_ylabel(r"|dB/dt| [V/m$^2$]")
-        ax1.grid(True, which="both", ls="--", alpha=0.4)
+        ax1.grid(True, which="both", ls="--", alpha=0.8)
         ax1.legend()
 
         rs, ds = _stair(t_thick, t_rho)
@@ -156,7 +166,7 @@ with tab_tem:
         ax2.invert_yaxis()
         ax2.set_xlabel(r"Resistivity [Ohm.m]")
         ax2.set_ylabel("Depth [m]")
-        ax2.grid(True, which="both", ls="--", alpha=0.4)
+        ax2.grid(True, which="both", ls="--", alpha=0.8)
 
         plt.tight_layout()
         st.pyplot(fig)

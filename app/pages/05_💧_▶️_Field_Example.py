@@ -15,8 +15,8 @@ import matplotlib.pyplot as plt
 
 plt.rcParams.update({
     "font.size":       16,
-    "axes.labelsize":  18,
-    "axes.titlesize":  18,
+    "axes.labelsize":  16,
+    "axes.titlesize":  16,
     "xtick.labelsize": 16,
     "ytick.labelsize": 16,
     "legend.fontsize": 16,
@@ -45,35 +45,31 @@ _TX_RADIUS = float(np.sqrt(_TX_SIDE ** 2 / np.pi))
 _VES_FILTER = "gs11"
 
 # -- Page header ---------------------------------------------------------------
-st.header(":blue[Field example: finding water in the West-African regolith]")
+st.header(":blue[Field example: finding water in regolith]")
 
 st.markdown(
     """
-    Across the crystalline basement of West Africa (Burkina Faso, Ghana, Mali,
-    Cote d'Ivoire ...), most rural water supply comes not from the fresh,
+    Across the crystalline basement of West Africa, 
+    a significant portion of the rural water supply comes not from the fresh,
     impermeable bedrock but from the **weathered overburden, the regolith**,
     that caps it. A typical weathering profile looks like this:
 
     | Unit | Character | Resistivity | Role |
     |------|-----------|-------------|------|
-    | Lateritic / ferricrete cap | hard, iron-rich crust | **high** (hundreds of Ohm.m) | dry, protective |
-    | Saprolite | clay-rich weathered rock | **low** (tens of Ohm.m) | stores water |
-    | Saprock / fractured basement | partly weathered, fractured | low-moderate | yields water |
-    | Fresh basement | unweathered crystalline rock | **very high** (thousands of Ohm.m) | aquiclude |
+    | Lateritic / ferricrete cap | Hard, iron-rich crust | **High** (hundreds of Ohm.m) | Dry, protective |
+    | Saprolite | Clay-rich weathered rock | **Low** (tens of Ohm.m) | Stores water |
+    | Saprock / fractured basement | Partly weathered, fractured | **Low-moderate** | Yields water |
+    | Fresh basement | Unweathered crystalline rock | **Very high** (thousands of Ohm.m) | Aquiclude |
 
     The productive aquifer is the **conductive saprolite/saprock** sitting between
-    a resistive cap and the resistive fresh basement. Because TEM is most
-    sensitive to conductive layers, it is an excellent tool for mapping the
-    thickness of this weathered zone and choosing where to drill a borehole.
+    a resistive cap and the resistive fresh basement.
     """
 )
 
 st.info(
     "**The task.** A field crew recorded two soundings at a candidate borehole "
     "site: a central-loop TEM sounding (40 x 40 m loop) and a Schlumberger VES. "
-    "The true ground is unknown. Invert both, compare what each method resolves, "
-    "then read off how thick the weathered aquifer is and how deep the fresh "
-    "basement lies."
+    "The true ground is unknown. Invert both, compare what each method resolves."
 )
 
 # -- Load the 'field' data -----------------------------------------------------
@@ -119,7 +115,7 @@ with tab_tem:
     ax_d.set_xlabel("Time [s]")
     ax_d.set_ylabel(r"|dB/dt| [V/m$^2$]")
     ax_d.set_title("Central-loop TEM sounding (raw field data)")
-    ax_d.grid(True, which="both", ls="--", alpha=0.4)
+    ax_d.grid(True, which="both", ls="--", alpha=0.8)
     ax_d.legend()
     st.pyplot(fig_d, clear_figure=True)
     st.caption(
@@ -130,14 +126,14 @@ with tab_tem:
     )
 
 with tab_ves:
-    fig_v, ax_v = plt.subplots(figsize=(7, 4.5))
-    ax_v.plot(ab2, rhoa_obs, "o-", ms=5, color="darkorange", lw=1.5, label="Field data")
+        """
+    )
     ax_v.set_xscale("log")
     ax_v.set_yscale("log")
     ax_v.set_xlabel("AB/2 [m]")
     ax_v.set_ylabel("Apparent resistivity [Ohm.m]")
     ax_v.set_title("Schlumberger VES sounding (raw field data)")
-    ax_v.grid(True, which="both", ls="--", alpha=0.4)
+    ax_v.grid(True, which="both", ls="--", alpha=0.8)
     ax_v.legend()
     st.pyplot(fig_v, clear_figure=True)
     st.caption(
@@ -260,7 +256,7 @@ if "wa_result" in st.session_state and "wa_result_ves" in st.session_state:
     ax_model.set_xlabel("Resistivity [Ohm.m]")
     ax_model.set_ylabel("Depth [m]")
     ax_model.set_title("Recovered resistivity models")
-    ax_model.grid(True, which="both", ls="--", alpha=0.4)
+    ax_model.grid(True, which="both", ls="--", alpha=0.8)
     ax_model.legend()
 
     ax_tem.loglog(times, dbdt_pred, "-", color="steelblue", lw=1.5, label="Predicted")
@@ -268,7 +264,7 @@ if "wa_result" in st.session_state and "wa_result_ves" in st.session_state:
     ax_tem.set_xlabel("Time [s]")
     ax_tem.set_ylabel(r"|dB/dt| [V/m$^2$]")
     ax_tem.set_title("TEM data fit")
-    ax_tem.grid(True, which="both", ls="--", alpha=0.4)
+    ax_tem.grid(True, which="both", ls="--", alpha=0.8)
     ax_tem.legend()
 
     ax_ves.loglog(ab2, rhoa_pred, "-", color="darkorange", lw=1.5, label="Predicted")
@@ -276,54 +272,21 @@ if "wa_result" in st.session_state and "wa_result_ves" in st.session_state:
     ax_ves.set_xlabel("AB/2 [m]")
     ax_ves.set_ylabel("Apparent resistivity [Ohm.m]")
     ax_ves.set_title("VES data fit")
-    ax_ves.grid(True, which="both", ls="--", alpha=0.4)
+    ax_ves.grid(True, which="both", ls="--", alpha=0.8)
     ax_ves.legend()
     st.pyplot(fig, clear_figure=True)
 
     # -- Interpretation --------------------------------------------------------
     st.subheader("3. Hydrogeological interpretation")
 
-    depth_nodes = np.concatenate([[0.0], np.cumsum(thick_r)])
-    layer_top = depth_nodes[:-1]
-    # Most conductive layer in the top 100 m anchors the regolith aquifer
-    upper = np.where(layer_top < 100.0)[0]
-    pool = upper if upper.size else np.arange(len(rho_r) - 1)
-    aq_idx = pool[np.argmin(rho_r[pool])]
-    aq_rho = rho_r[aq_idx]
-
-    # Span the contiguous conductor: layers within 1.5x of the minimum
-    cond_thr = 1.5 * aq_rho
-    top_i = aq_idx
-    while top_i - 1 >= 0 and rho_r[top_i - 1] < cond_thr:
-        top_i -= 1
-    bot_i = aq_idx
-    while bot_i + 1 < len(rho_r) and rho_r[bot_i + 1] < cond_thr:
-        bot_i += 1
-    aq_top = depth_nodes[top_i]
-    aq_base = depth_nodes[bot_i + 1]
-    aq_thick = max(aq_base - aq_top, 0.0)
-
-    ic1, ic2, ic3 = st.columns(3)
-    ic1.metric("Aquifer resistivity", f"{aq_rho:.0f} Ohm.m")
-    ic2.metric("Top of saprolite", f"{aq_top:.0f} m")
-    ic3.metric("Weathered thickness", f"{aq_thick:.0f} m",
-               help="From top of the conductor to the resistive basement.")
 
     st.markdown(
-        f"""
+        """
         **Reading the model.**
 
         - A **resistive surface layer** corresponds to the dry lateritic/ferricrete cap.
-        - Below it, a **conductive zone (~{aq_rho:.0f} Ohm.m)** starting near
-          **{aq_top:.0f} m** is the **clay-rich saprolite**, the water-storing regolith.
-        - Resistivity then rises sharply into the **fresh crystalline basement**
-          near **{aq_base:.0f} m**, marking the base of the productive weathered zone.
-
-        **Drilling guidance.** A borehole here should target the saturated
-        saprolite/saprock interval, roughly **{aq_top:.0f}-{aq_base:.0f} m**, and be
-        drilled a few metres into fractured basement to maximise yield. A total
-        weathered thickness of about **{aq_thick:.0f} m** is encouraging: thicker
-        regolith generally means greater storage and a more reliable supply.
+        - Below it, a **conductive zone** marks the clay-rich saprolite, the water-storing regolith.
+        - Resistivity then rises sharply into the **fresh crystalline basement**, marking the base of the productive weathered zone.
         """
     )
 
@@ -360,6 +323,16 @@ st.markdown(
 )
 
 _FE_QUIZ = [
+    {
+        "q": "Where should the borehole target be drilled to maximize yield?",
+        "options": [
+            "Within the lateritic / ferricrete cap",
+            "Within the saturated saprolite/saprock interval, roughly 6-36 m, and a few metres into fractured basement",
+            "Only in fresh crystalline basement",
+        ],
+        "answer": "Within the saturated saprolite/saprock interval, roughly 6-36 m, and a few metres into fractured basement",
+        "why": "That interval is the conductive regolith aquifer. Targeting it and drilling a few metres into fractured basement maximizes the chance of a productive borehole.",
+    },
     {
         "q": "The conductive saprolite aquifer (its resistivity and how deep it goes):",
         "options": ["TEM", "VES", "Equally well"],

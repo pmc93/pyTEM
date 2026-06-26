@@ -7,8 +7,8 @@ import streamlit as st
 
 plt.rcParams.update({
     "font.size":       16,
-    "axes.labelsize":  18,
-    "axes.titlesize":  18,
+    "axes.labelsize":  16,
+    "axes.titlesize":  16,
     "xtick.labelsize": 16,
     "ytick.labelsize": 16,
     "legend.fontsize": 16,
@@ -43,16 +43,16 @@ st.markdown(
     r"""
     Deciding where to drill a borehole is one of the most consequential (and costly) steps
     in a groundwater investigation. Drilling is expensive, and a dry or unproductive well
-    wastes resources and delays access to water. Geophysical methods allow us to image the
+    wastes resources and delays access to water. Geophysical methods allow imaging of the
     subsurface **before drilling**, mapping the depth, thickness, and physical properties of
     aquifer materials across a site.
 
-    The key physical property linking geophysics to groundwater is **electrical resistivity**.
-    Resistivity varies with lithology and, to some extent, water quality. Saturated sands and
+    A key physical property in geophysical mapping of groundwater is **electrical resistivity**.
+    Resistivity varies with lithology, saturation, and, to some extent, water quality. Saturated sands and
     gravels are moderately conductive, clay-rich layers are highly conductive, basement rock
     is resistive, and saline water dramatically lowers resistivity. By mapping resistivity
     with depth, we can identify potential aquifer horizons, estimate depths to the water table,
-    and detect saline intrusion; all without a single drill hole. 
+    and detect saline intrusion. 
     
     Two methods that  are sensitive to subsurface resistivity are the **TEM** (transient electromagnetic) 
     and **VES** (vertical electrical sounding) methods: both map the subsurface resistivity structure, 
@@ -63,12 +63,12 @@ st.markdown(
 # ── Aim, motivation, and target groups ────────────────────────────────────────
 st.info(
     """
-    **What this app is for.** An interactive, hands-on introduction to how TEM and
+    **What this app is for?** 
+    An interactive, hands-on introduction to how TEM and
     VES soundings "see" the subsurface and how we turn measured curves into
-    resistivity-versus-depth models, framed around a practical goal: **finding
-    groundwater**.
+    resistivity-versus-depth models.
 
-    **Who it is for**
+    **Who it is for?**
     - 🎓 **Students** meeting near-surface geophysics for the first time.
     - 🛠️ **Applied geophysicists & hydrogeologists** wanting quick intuition for survey design and interpretation.
     - 👩‍🏫 **Educators** looking for a live demo of forward modelling, sensitivity, and inversion.
@@ -81,10 +81,11 @@ with col1:
     st.markdown("""
 <div style="background-color:#1a3a5c; border-left:6px solid steelblue;
             border-radius:6px; padding:1rem 1.2rem;">
-  <h4 style="color:steelblue; margin-top:0;">🧲 TEM — Transient Electromagnetic Method</h4>
+  <h4 style="color:steelblue; margin-top:0;">🧲 TEM: Transient Electromagnetic Method</h4>
   <p>A transmitter (Tx) loop carries a steady current that is abruptly switched off.
-  The collapsing magnetic field induces <b>eddy currents</b> that diffuse downward through
-  the earth. A receiver (Rx) coil records the decaying secondary field dB/dt.</p>
+  The collapsing magnetic field induces <b>eddy currents</b> that diffuse through
+  the earth and generate a secondary magnetic field. A receiver (Rx) coil records the 
+                decaying secondary field dB/dt.</p>
   <ul style="margin-bottom:0;">
     <li><b>Source:</b> inductive, no ground contact needed</li>
     <li><b>Depth proxy:</b> time (early = shallow, late = deep)</li>
@@ -98,51 +99,44 @@ with col2:
     st.markdown("""
 <div style="background-color:#3d2200; border-left:6px solid darkorange;
             border-radius:6px; padding:1rem 1.2rem;">
-  <h4 style="color:darkorange; margin-top:0;">⚡️ VES — Vertical Electrical Sounding Method</h4>
-  <p>Current is injected via two electrodes (A, B); a second pair (M, N) measures the
-  resulting voltage. Increasing the electrode spacing between A and B drives current deeper
-  and samples greater depths.</p>
+  <h4 style="color:darkorange; margin-top:0;">⚡️ VES: Vertical Electrical Sounding Method</h4>
+  <p>Current is injected between two electrodes (A, B), and the resultant voltage is measured between a second pair (M, N). 
+                Increasing the electrode spacing between A and B drives current deeper and samples greater depths.</p>
   <ul style="margin-bottom:0;">
     <li><b>Source:</b> galvanic, electrodes must contact the ground</li>
     <li><b>Depth proxy:</b> AB electrode spacing (small = shallow, large = deep)</li>
     <li><b>Best for:</b> resistive layers and general stratigraphy</li>
-    <li><b>Data:</b> apparent resistivity curve ρₐ(AB/2)</li>
+    <li><b>data:</b> apparent resistivity curve ρ<sub>a</sub>(AB/2)</li>
   </ul>
 </div>
 """, unsafe_allow_html=True)
-
-left_co, cent_co, last_co = st.columns((1, 3, 1))
-with cent_co:
-    _sketch_url = (
-        "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5b/"
-        "Transient_electromagnetic_method.svg/800px-Transient_electromagnetic_method.svg.png"
-    )
-    _sketch_caption = (
-        "Sketch of a central-loop TEM survey: the transmitter loop (Tx) carries a "
-        "steady current that is switched off at t = 0, and the receiver (Rx) records "
-        "the decaying secondary field dB/dt."
-    )
-    try:
-        st.image(_sketch_url, caption=_sketch_caption)
-    except Exception:
-        # External hotlink can fail (network / CDN); degrade gracefully.
-        st.caption(_sketch_caption)
 
 st.divider()
 
 st.subheader("Comparison")
 st.markdown(
     """
+    **Use TEM when you want:**
+    - Rapid coverage over a larger area without ground contact.
+    - Strong sensitivity to conductive layers, saline water, and clay.
+    - Deeper investigation with a loop-sized footprint.
+
+    **Use VES when you want:**
+    - Direct galvanic current injection into the ground.
+    - A classic resistivity sounding that responds well to resistive layers.
+    - A simple, low-cost setup for near-surface stratigraphy.
+
     | Property | 🧲 TEM | ⚡️ VES |
     |---|---|---|
-    | Source | Inductive loop | Galvanic electrodes |
-    | Depth proxy | Time | AB electrode spacing |
+    | How it works | Inductive loop transmits a current pulse | Electrodes inject current directly into the ground |
+    | Main control on depth | Time after turn-off | Electrode spacing (AB/2) |
     | Ground contact | Not required | Required |
-    | Best sensitivity | Conductive layers | Both, but resistors harder |
-    | Key limitation | Noise floor at late times | Equivalence (thin resistors) |
-    | Lateral footprint | Tx loop side length | AB electrode spacing |
-    | Model output | Resistivity + thickness | Resistivity + thickness |
-    """
+    | Best sensitivity | Conductive targets and groundwater salinity | Resistive layers and layered stratigraphy |
+    | Main limitation | Urban cultural noise and coupling to nearby infrastructure can contaminate signal | Thin layers can suffer from equivalence |
+    | Survey footprint | Loop size | Electrode spacing |
+    | Typical output | dB/dt decay curve | Apparent resistivity curve ρ<sub>a</sub>(AB/2) |
+    """,
+    unsafe_allow_html=True,
 )
 st.divider()
 
@@ -220,13 +214,13 @@ st.subheader(':blue[Module overview]', divider="blue")
 st.markdown(
     """
     :blue[The module is organised as follows:]
-    - 📈 **Forward Modeling ▶️**: build a layered earth model and compute the predicted
+    - 📈 **Forward Modeling ▶️**: Build a layered earth model and compute the predicted
       dB/dt (TEM) and apparent resistivity curve (VES) in real time.
-    - 📊 **Jacobian & Sensitivity ▶️**: explore which data points are sensitive to which
+    - 📊 **Jacobian & Sensitivity ▶️**: Explore which data points are sensitive to which
       layers; compare TEM and VES sensitivity side by side.
-    - 🎯 **Inversion ▶️**: run a synthetic inversion for TEM and VES
+    - 🎯 **Inversion ▶️**: Run a synthetic inversion for TEM and VES
       and inspect how well each recovers the true model.
-    -  **About**: references and acknowledgements.
+    -  **About**: References and acknowledgements.
     """
 )
 
