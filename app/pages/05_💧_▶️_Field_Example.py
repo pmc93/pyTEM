@@ -126,8 +126,8 @@ with tab_tem:
     )
 
 with tab_ves:
-        """
-    )
+    fig_v, ax_v = plt.subplots(figsize=(7, 4.5))
+    ax_v.plot(ab2, rhoa_obs, "o-", ms=5, color="darkorange", lw=1.5, label="Field data")
     ax_v.set_xscale("log")
     ax_v.set_yscale("log")
     ax_v.set_xlabel("AB/2 [m]")

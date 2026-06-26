@@ -16,11 +16,11 @@ st.header(":blue[Background, references, and acknowledgements]")
 st.subheader(":blue-background[pyTEM]", divider="blue")
 st.markdown(
     """
-    This app is built on top of **pyTEM**, an open-source Python package for
+    This app is built on top of **PyTEM**, an open-source Python package for
     1-D layered-earth Time-Domain Electromagnetic (TEM) forward modelling and inversion.
-    pyTEM is available on GitHub: [github.com/TODO/pyTEM](https://github.com/TODO/pyTEM).
+    PyTEM is available on GitHub: [github.com/TODO/PyTEM](https://github.com/TODO/PyTEM).
 
-    The core of pyTEM implements:
+    The core of PyTEM implements:
     - 1-D forward modelling via Wait's upward TE recursion and digital linear filter (DLF) transforms
     - Four loop geometries (circular/square, central/offset) and three compute backends (NumPy, Numba, CuPy)
     - Regularised Gauss-Newton inversion with an analytical Jacobian
@@ -31,13 +31,13 @@ st.markdown(
 st.subheader(":blue-background[VES module]", divider="blue")
 st.markdown(
     """
-    The VES (vertical electrical sounding) functionality is bundled within the pyTEM repository
+    The VES (vertical electrical sounding) functionality is bundled within the PyTEM repository
     as a self-contained subpackage (`ves/`). It is based on the
     [PyVES library](https://github.com/asidosaputra/PyVES) by Asido Saputra, which implements
     1-D DC resistivity forward modelling using digital linear filter coefficients
     (Guptasarma & Singh 1997) and Levenberg-Marquardt inversion.
     The version included here replaces the inversion with regularised Gauss-Newton and
-    has been extended to integrate with the pyTEM modelling and app framework.
+    has been extended to integrate with the PyTEM modelling and app framework.
     """
 )
 
@@ -67,15 +67,6 @@ st.markdown(
       *Geophysics*, 43(3), 588-609.
     - Cole, K. S., & Cole, R. H. (1941). Dispersion and absorption in dielectrics.
       *Journal of Chemical Physics*, 9(4), 341-351.
-    """
-)
-
-st.subheader(":blue-background[Acknowledgements]", divider="blue")
-st.markdown(
-    """
-    This module was developed at the **Technical University of Denmark (DTU)**.
-    The app structure is inspired by the [Groundwater Project](https://gw-project.org)
-    interactive learning modules.
     """
 )
 
