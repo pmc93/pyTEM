@@ -105,42 +105,33 @@ except FileNotFoundError:
 # -- Show the raw field data ---------------------------------------------------
 st.subheader("1. The measured soundings")
 
-tab_tem, tab_ves = st.tabs(["🧲 TEM", "⚡️ VES"])
+fig_raw, (ax_tem_raw, ax_ves_raw) = plt.subplots(1, 2, figsize=(13, 5), constrained_layout=True)
 
-with tab_tem:
-    fig_d, ax_d = plt.subplots(figsize=(12, 5))
-    ax_d.plot(times, dbdt_obs, "o-", ms=5, color="steelblue", lw=1.5, label="Field data")
-    ax_d.set_xscale("log")
-    ax_d.set_yscale("log")
-    ax_d.set_xlabel("Time [s]")
-    ax_d.set_ylabel(r"|dB/dt| [V/m$^2$]")
-    ax_d.set_title("Central-loop TEM sounding (raw field data)")
-    ax_d.grid(True, which="both", ls="--", alpha=0.8)
-    ax_d.legend()
-    st.pyplot(fig_d, clear_figure=True)
-    st.caption(
-        "The decay curve carries the signature of the layering: an early-time "
-        "plateau from the resistive cap, a sustained mid-time signal from the "
-        "conductive saprolite, and a steep late-time roll-off as the field "
-        "diffuses into the resistive basement."
-    )
+ax_tem_raw.plot(times, dbdt_obs, "o-", ms=5, color="steelblue", lw=1.5, label="Field data")
+ax_tem_raw.set_xscale("log")
+ax_tem_raw.set_yscale("log")
+ax_tem_raw.set_xlabel("Time [s]")
+ax_tem_raw.set_ylabel(r"|dB/dt| [V/m$^2$]")
+ax_tem_raw.set_title("Central-loop TEM sounding")
+ax_tem_raw.grid(True, which="both", ls="--", alpha=0.8)
+ax_tem_raw.legend()
 
-with tab_ves:
-    fig_v, ax_v = plt.subplots(figsize=(12, 5))
-    ax_v.plot(ab2, rhoa_obs, "o-", ms=5, color="darkorange", lw=1.5, label="Field data")
-    ax_v.set_xscale("log")
-    ax_v.set_yscale("log")
-    ax_v.set_xlabel("AB/2 [m]")
-    ax_v.set_ylabel("Apparent resistivity [Ohm.m]")
-    ax_v.set_title("Schlumberger VES sounding (raw field data)")
-    ax_v.grid(True, which="both", ls="--", alpha=0.8)
-    ax_v.legend()
-    st.pyplot(fig_v, clear_figure=True)
-    st.caption(
-        "The apparent-resistivity curve rises over the resistive cap, dips across "
-        "the conductive saprolite, and climbs again towards the resistive "
-        "basement at large electrode spacings."
-    )
+ax_ves_raw.plot(ab2, rhoa_obs, "o-", ms=5, color="darkorange", lw=1.5, label="Field data")
+ax_ves_raw.set_xscale("log")
+ax_ves_raw.set_yscale("log")
+ax_ves_raw.set_xlabel("AB/2 [m]")
+ax_ves_raw.set_ylabel("Apparent resistivity [Ohm.m]")
+ax_ves_raw.set_title("Schlumberger VES sounding")
+ax_ves_raw.grid(True, which="both", ls="--", alpha=0.8)
+ax_ves_raw.legend()
+
+st.pyplot(fig_raw, clear_figure=True)
+st.caption(
+    "TEM (left): the decay curve shows an early-time plateau from the resistive cap, "
+    "a sustained mid-time signal from conductive saprolite, and a late-time roll-off "
+    "toward resistive basement. VES (right): apparent resistivity rises over the cap, "
+    "dips across conductive saprolite, and rises again toward fresh basement at large AB/2."
+)
 
 # -- Inversion controls --------------------------------------------------------
 st.subheader("2. Invert both soundings for a resistivity-depth model")
@@ -318,7 +309,7 @@ if "wa_result" in st.session_state and "wa_result_ves" in st.session_state:
 # -- Quiz: which method resolves which feature ---------------------------------
 st.subheader(":violet[Check your intuition: which method resolves what?]", divider="violet")
 st.markdown(
-    "For each feature of the West-African weathering profile, decide which method "
+    "Decide which method "
     "is **better suited** to resolving it, then check your answers."
 )
 
