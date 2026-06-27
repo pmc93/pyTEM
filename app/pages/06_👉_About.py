@@ -13,7 +13,7 @@ from _shared import render_footer
 st.title("👉 About")
 st.header(":blue[Background, references, and acknowledgements]")
 
-st.subheader(":blue-background[pyTEM]", divider="blue")
+st.subheader(":blue-background[PyTEM]", divider="blue")
 st.markdown(
     """
     This app is built on top of **PyTEM**, an open-source Python package for
@@ -61,14 +61,7 @@ st.markdown(
     - Guptasarma, D., & Singh, B. (1997). New digital linear filters for Hankel J0 and J1 transforms.
       *Geophysical Prospecting*, 45(5), 745-762.
 
-    **IP models:**
-    - Pelton, W. H., Ward, S. H., Hallof, P. G., Sill, W. R., & Nelson, P. H. (1978).
-      Mineral discrimination and removal of inductive coupling with multifrequency IP.
-      *Geophysics*, 43(3), 588-609.
-    - Cole, K. S., & Cole, R. H. (1941). Dispersion and absorption in dielectrics.
-      *Journal of Chemical Physics*, 9(4), 341-351.
     """
 )
 
-st.divider()
 render_footer()
