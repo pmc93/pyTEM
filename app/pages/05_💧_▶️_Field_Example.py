@@ -126,12 +126,7 @@ ax_ves_raw.grid(True, which="both", ls="--", alpha=0.8)
 ax_ves_raw.legend()
 
 st.pyplot(fig_raw, clear_figure=True)
-st.caption(
-    "TEM (left): the decay curve shows an early-time plateau from the resistive cap, "
-    "a sustained mid-time signal from conductive saprolite, and a late-time roll-off "
-    "toward resistive basement. VES (right): apparent resistivity rises over the cap, "
-    "dips across conductive saprolite, and rises again toward fresh basement at large AB/2."
-)
+
 
 # -- Inversion controls --------------------------------------------------------
 st.subheader("2. Invert both soundings for a resistivity-depth model")
