@@ -127,7 +127,6 @@ ax_ves_raw.legend()
 
 st.pyplot(fig_raw, clear_figure=True)
 
-
 # -- Inversion controls --------------------------------------------------------
 st.subheader("2. Invert both soundings for a resistivity-depth model")
 

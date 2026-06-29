@@ -37,7 +37,7 @@ def _intro_tem_curve(thick, rho, tx_r, times):
                                tx_radius=tx_r, times=np.array(times))
 
 
-st.header(":blue[Resistivity methods for groundwater investigation]")
+st.header(":blue[Geophysical methods for groundwater investigation]")
 
 st.markdown(
     r"""

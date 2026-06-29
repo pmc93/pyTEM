@@ -135,7 +135,7 @@ J_ves = J_ves_raw[:, :N]
 layer_lbls = [f"L{i+1}\n{rho[i]:.0f}" for i in range(N)]
 
 # TEM row
-fig_tem, axes_tem = plt.subplots(1, 3, figsize=(14, 4.8))
+fig_tem, axes_tem = plt.subplots(1, 3, figsize=(12, 5))
 fig_tem.subplots_adjust(wspace=0.45, bottom=0.2)
 
 ax = axes_tem[0]
@@ -168,7 +168,7 @@ st.pyplot(fig_tem)
 plt.close(fig_tem)
 
 # VES row
-fig_ves, axes_ves = plt.subplots(1, 3, figsize=(14, 4.8))
+fig_ves, axes_ves = plt.subplots(1, 3, figsize=(12, 5))
 fig_ves.subplots_adjust(wspace=0.45, bottom=0.2)
 
 ax = axes_ves[0]

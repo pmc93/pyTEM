@@ -162,7 +162,7 @@ def _add_noise(dbdt_clean, times, b_coeff, rhoa_clean, ves_frac, seed=42):
 
 
 def _plot_data(clean, noisy):
-    fig, (axt, axv) = plt.subplots(1, 2, figsize=(13, 5))
+    fig, (axt, axv) = plt.subplots(1, 2, figsize=(12, 5))
     _t = clean["times"]
     _a = clean["ab2"]
     axt.loglog(_t, np.abs(clean["dbdt_clean"]), "-", color="steelblue", lw=1.8, label="Clean")
@@ -333,7 +333,7 @@ col_m3.metric("VES final RMS", f"{_ves_rms_norm:.3f}" if _ves_rms_norm is not No
 col_m4.metric("VES iterations", len(rms_ves))
 
 # -- Results grid: 2 data fits + combined model --------------------------------
-fig = plt.figure(figsize=(14, 13))
+fig = plt.figure(figsize=(12, 12))
 gs  = fig.add_gridspec(3, 2, hspace=0.42, wspace=0.3)
 ax_tem_data = fig.add_subplot(gs[0, 0])
 ax_ves_data = fig.add_subplot(gs[0, 1])
