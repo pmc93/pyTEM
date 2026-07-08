@@ -29,7 +29,7 @@ from pytem import fwd_circle_central, invert as tem_invert, getJ_ana
 from pytem.inversion import getR
 from pytem.ip_models import tem_forward_ip, pelton_res_rho
 from ves import forward as ves_forward, invert as ves_invert, jacobian as ves_jacobian, forward_ip as ves_forward_ip
-from _shared import render_footer
+from _shared import render_footer, is_mobile
 
 # -- Page header ---------------------------------------------------------------
 st.header(":red[Recover a resistivity model from noisy data]")
@@ -74,12 +74,12 @@ col_tem_s, col_ves_s = st.columns(2)
 
 with col_tem_s:
     st.markdown('**TEM**')
-    tx_side     = st.number_input('Tx loop side length (m)', min_value=5.0, max_value=500.0, value=40.0, step=5.0, key='inv_tx_side',
+    tx_side     = st.number_input('Tx loop side length [m]', min_value=5.0, max_value=500.0, value=40.0, step=5.0, key='inv_tx_side',
                                   help='Side length of the square transmitter loop. Larger loops push the signal deeper.')
     tx_r        = float(np.sqrt(tx_side ** 2 / np.pi))
-    t_start_log = st.number_input('First gate log10(s)', min_value=-6.0, max_value=-1.0, value=-5.0, step=0.5, format='%.1f', key='inv_t_start',
+    t_start_log = st.number_input('First gate [log10(s)]', min_value=-6.0, max_value=-1.0, value=-5.0, step=0.5, format='%.1f', key='inv_t_start',
                                   help='Earliest measurement time as a base-10 exponent in seconds, e.g. -5 means 1e-5 s. Early times see shallow structure.')
-    t_end_log   = st.number_input('Last gate log10(s)',  min_value=-4.0, max_value=0.0,  value=-2.0, step=0.5, format='%.1f', key='inv_t_end',
+    t_end_log   = st.number_input('Last gate [log10(s)]',  min_value=-4.0, max_value=0.0,  value=-2.0, step=0.5, format='%.1f', key='inv_t_end',
                                   help='Latest measurement time as a base-10 exponent in seconds, e.g. -2 means 1e-2 s. Late times see deeper structure.')
     n_times     = int(st.number_input('Number of gates', min_value=5, max_value=60, value=20, step=2, key='inv_n_times',
                                       help='How many time gates (data points) are sampled between the first and last gate.'))
@@ -87,9 +87,9 @@ with col_tem_s:
 
 with col_ves_s:
     st.markdown('**VES**')
-    ab2_min     = st.number_input('AB/2 min (m)',  min_value=0.5,  max_value=100.0,  value=1.0,   step=0.5,  key='inv_ab2min',
+    ab2_min     = st.number_input('AB/2 min [m]',  min_value=0.5,  max_value=100.0,  value=1.0,   step=0.5,  key='inv_ab2min',
                                   help='Smallest half electrode spacing (AB/2). Small spacings sense shallow structure.')
-    ab2_max     = st.number_input('AB/2 max (m)',  min_value=10.0, max_value=5000.0, value=300.0, step=10.0, key='inv_ab2max',
+    ab2_max     = st.number_input('AB/2 max [m]',  min_value=10.0, max_value=5000.0, value=300.0, step=10.0, key='inv_ab2max',
                                   help='Largest half electrode spacing (AB/2). Large spacings sense deeper structure.')
     n_ab2       = int(st.number_input('Number of electrode spacings', min_value=5, max_value=60, value=20, step=1, key='inv_nab2',
                                       help='How many electrode spacings (data points) are sampled between the min and max AB/2.'))
@@ -108,20 +108,20 @@ col_true = st.container()
 with col_true:
     st.caption('Last row is the half-space with an infinite thickness - leave its Thickness cell empty.')
     _default_true = pd.DataFrame({
-            'Thickness (m)':       [10.0, 40.0, None],
-            'Resistivity (Ohm.m)': [100.0, 10.0, 200.0],
+            'Thickness [m]':       [10.0, 40.0, None],
+            'Resistivity [Ohm.m]': [100.0, 10.0, 200.0],
         })
     _edited_true = st.data_editor(
         _default_true,
         column_config={
-            'Thickness (m)':       st.column_config.NumberColumn(min_value=0.1, max_value=10000.0, format='%.1f'),
-            'Resistivity (Ohm.m)': st.column_config.NumberColumn(min_value=0.01, max_value=1e6,    format='%.1f'),
+            'Thickness [m]':       st.column_config.NumberColumn(min_value=0.1, max_value=10000.0, format='%.1f'),
+            'Resistivity [Ohm.m]': st.column_config.NumberColumn(min_value=0.01, max_value=1e6,    format='%.1f'),
         },
         num_rows='dynamic', use_container_width=True, key='inv_true_editor',
     )
-    _valid_true = _edited_true.dropna(subset=['Resistivity (Ohm.m)'])
-    true_thick = _valid_true['Thickness (m)'].dropna().tolist()
-    true_rho   = _valid_true['Resistivity (Ohm.m)'].tolist()
+    _valid_true = _edited_true.dropna(subset=['Resistivity [Ohm.m]'])
+    true_thick = _valid_true['Thickness [m]'].dropna().tolist()
+    true_rho   = _valid_true['Resistivity [Ohm.m]'].tolist()
     if len(true_rho) < 1:
         st.warning('Add at least one layer.')
         st.stop()
@@ -164,7 +164,10 @@ def _add_noise(dbdt_clean, times, b_coeff, rhoa_clean, ves_frac, seed=42):
 
 
 def _plot_data(clean, noisy):
-    fig, (axt, axv) = plt.subplots(2, 1, figsize=(8, 12))
+    if is_mobile():
+        fig, (axt, axv) = plt.subplots(2, 1, figsize=(8, 12))
+    else:
+        fig, (axt, axv) = plt.subplots(1, 2, figsize=(14, 6))
     _t = clean["times"]
     _a = clean["ab2"]
     axt.loglog(_t, np.abs(clean["dbdt_clean"]), "-", color="steelblue", lw=1.8, label="Clean")
@@ -222,13 +225,13 @@ st.markdown(
 col_n1, col_n2 = st.columns(2)
 with col_n1:
     st.markdown(r"**TEM noise floor** &nbsp; $e = b\,t^{-1/2}$")
-    log_b = st.slider("log\u2081\u2080(b)", -13.0, -8.0, -11.5, 0.1, key="inv_tem_b",
+    log_b = st.slider("[log\u2081\u2080(b)]", -13.0, -8.0, -11.5, 0.1, key="inv_tem_b",
                       help="TEM noise standard deviation follows e = b\u00b7t^(-1/2), with t in seconds.")
     b_coeff = 10.0 ** log_b
     st.caption(f"b = {b_coeff:.2e}  \u2192  noise \u2248 {b_coeff * 1e-3 ** -0.5:.2e} V/m\u00b2 at 1 ms")
 with col_n2:
     st.markdown("**VES noise** &nbsp; relative percentage")
-    ves_pct = st.number_input("VES error (%)", min_value=1.0, max_value=30.0,
+    ves_pct = st.number_input("VES error [%]", min_value=1.0, max_value=30.0,
                               value=5.0, step=1.0, key="inv_ves_pct")
     ves_frac = ves_pct / 100.0
 
@@ -254,7 +257,7 @@ if noisy is None:
 # ==============================================================================
 st.subheader(":violet-background[3. Run the inversion]", divider="violet")
 
-start_rho = st.number_input('Starting resistivity (Ohm·m)', min_value=1.0, max_value=5000.0, value=100.0, step=10.0, key='inv_start_rho',
+start_rho = st.number_input('Starting resistivity [Ohm.m]', min_value=1.0, max_value=5000.0, value=100.0, step=10.0, key='inv_start_rho',
                             help='Resistivity of the homogeneous half-space the inversion starts from before it begins iterating.')
 st.caption('The regularisation (smoothing) is set automatically from the data.')
 st.info(
@@ -373,7 +376,7 @@ ax.loglog(ab2, rhoap_pred, color="darkorange", linestyle="-", lw=1.5, label="Pre
 ax.loglog(ab2, rhoap_obs,  color="black", marker="o", linestyle="None", ms=4,   label="Observed VES", zorder=4)
 ax.set_ylim(_rlo, _rhi)
 ax.set_xlabel("AB/2 [m]")
-ax.set_ylabel("Apparent resistivity [Ohm.m]")
+ax.set_ylabel("App. resistivity [Ohm.m]")
 ax.grid(True, which="both", ls="--", alpha=0.4)
 ax.legend()
 

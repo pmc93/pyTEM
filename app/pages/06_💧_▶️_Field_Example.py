@@ -38,7 +38,7 @@ if _APP_DIR not in sys.path:
 
 from pytem import fwd_circle_central, invert as tem_invert
 from ves import forward as ves_forward, invert as ves_invert
-from _shared import render_footer
+from _shared import render_footer, is_mobile
 
 
 def _fig_png(fig):
@@ -115,14 +115,18 @@ except FileNotFoundError:
 st.subheader("1. The measured soundings")
 
 @st.cache_data(show_spinner=False)
-def _build_raw_fig(times_t, dbdt_obs_t, ab2_t, rhoa_obs_t):
+def _build_raw_fig(times_t, dbdt_obs_t, ab2_t, rhoa_obs_t, mobile):
     times = np.asarray(times_t)
     dbdt_obs = np.asarray(dbdt_obs_t)
     ab2 = np.asarray(ab2_t)
     rhoa_obs = np.asarray(rhoa_obs_t)
 
-    fig_raw = Figure(figsize=(8, 12), constrained_layout=True)
-    ax_tem_raw, ax_ves_raw = fig_raw.subplots(2, 1)
+    if mobile:
+        fig_raw = Figure(figsize=(8, 12), constrained_layout=True)
+        ax_tem_raw, ax_ves_raw = fig_raw.subplots(2, 1)
+    else:
+        fig_raw = Figure(figsize=(14, 6), constrained_layout=True)
+        ax_tem_raw, ax_ves_raw = fig_raw.subplots(1, 2)
 
     ax_tem_raw.plot(times, dbdt_obs, "o-", ms=5, color="steelblue", lw=1.5, label="Field data")
     ax_tem_raw.set_xscale("log")
@@ -139,13 +143,13 @@ def _build_raw_fig(times_t, dbdt_obs_t, ab2_t, rhoa_obs_t):
     ax_ves_raw.set_ylim(top=1e3)
     ax_ves_raw.set_xlabel("AB/2 [m]")
     ax_ves_raw.set_ylabel("Apparent resistivity [Ohm.m]")
-    ax_ves_raw.set_title("Schlumberger VES sounding")
+    ax_ves_raw.set_title("VES sounding")
     ax_ves_raw.grid(True, which="both", ls="--", alpha=0.8)
     ax_ves_raw.legend()
     return _fig_png(fig_raw)
 
 
-fig_raw = _build_raw_fig(tuple(times), tuple(dbdt_obs), tuple(ab2), tuple(rhoa_obs))
+fig_raw = _build_raw_fig(tuple(times), tuple(dbdt_obs), tuple(ab2), tuple(rhoa_obs), is_mobile())
 st.image(fig_raw, use_column_width=True)
 
 # -- Inversion controls --------------------------------------------------------
@@ -209,7 +213,7 @@ def _stair(thick, rho, extra=50.0):
 
 @st.cache_data(show_spinner=False)
 def _build_results_fig(thick_r, rho_r, thick_v, rho_v, dbdt_pred_t, rhoa_pred_t,
-                       times_t, dbdt_obs_t, ab2_t, rhoa_obs_t, show_units):
+                       times_t, dbdt_obs_t, ab2_t, rhoa_obs_t, show_units, mobile):
     rho_r = np.asarray(rho_r)
     rho_v = np.asarray(rho_v)
     dbdt_pred = np.asarray(dbdt_pred_t)
@@ -219,11 +223,18 @@ def _build_results_fig(thick_r, rho_r, thick_v, rho_v, dbdt_pred_t, rhoa_pred_t,
     ab2 = np.asarray(ab2_t)
     rhoa_obs = np.asarray(rhoa_obs_t)
 
-    fig = Figure(figsize=(12, 12))
-    gs = fig.add_gridspec(2, 2, hspace=0.32, wspace=0.3)
-    ax_model = fig.add_subplot(gs[:, 0])
-    ax_tem = fig.add_subplot(gs[0, 1])
-    ax_ves = fig.add_subplot(gs[1, 1])
+    if mobile:
+        fig = Figure(figsize=(8, 16))
+        gs = fig.add_gridspec(3, 1, hspace=0.4)
+        ax_model = fig.add_subplot(gs[0, 0])
+        ax_tem = fig.add_subplot(gs[1, 0])
+        ax_ves = fig.add_subplot(gs[2, 0])
+    else:
+        fig = Figure(figsize=(12, 12))
+        gs = fig.add_gridspec(2, 2, hspace=0.32, wspace=0.3)
+        ax_model = fig.add_subplot(gs[:, 0])
+        ax_tem = fig.add_subplot(gs[0, 1])
+        ax_ves = fig.add_subplot(gs[1, 1])
 
     rs_t, ds_t = _stair(list(thick_r), list(rho_r))
     rs_v, ds_v = _stair(list(thick_v), list(rho_v))
@@ -325,7 +336,7 @@ if "wa_result" in st.session_state and "wa_result_ves" in st.session_state:
         tuple(thick_v), tuple(np.asarray(rho_v).tolist()),
         tuple(np.asarray(dbdt_pred).tolist()), tuple(np.asarray(rhoa_pred).tolist()),
         tuple(times), tuple(dbdt_obs), tuple(ab2), tuple(rhoa_obs),
-        bool(show_units),
+        bool(show_units), is_mobile(),
     )
     st.image(fig, use_column_width=True)
 

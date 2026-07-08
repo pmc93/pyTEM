@@ -28,7 +28,7 @@ if _APP_DIR not in sys.path:
 
 from pytem import fwd_circle_central, getJ_ana
 from ves import forward as ves_forward, jacobian as ves_jacobian
-from _shared import render_footer
+from _shared import render_footer, is_mobile
 
 
 def _fig_png(fig):
@@ -92,16 +92,21 @@ def _ves_jac(ab2_t, rho_t, h_t, filt):
 
 # -- Cached figure builders (rebuilt only when their inputs change) ------------
 @st.cache_data(show_spinner=False)
-def _build_jac_tem_fig(times, dbdt, J_tem, layer_lbls, n_data):
+def _build_jac_tem_fig(times, dbdt, J_tem, layer_lbls, n_data, mobile):
     times = np.asarray(times)
     dbdt = np.asarray(dbdt)
     J_tem = np.asarray(J_tem)
     layer_lbls = list(layer_lbls)
     N = len(layer_lbls)
 
-    fig_tem = Figure(figsize=(8, 12))
-    axes_tem = fig_tem.subplots(3, 1)
-    fig_tem.subplots_adjust(hspace=0.45)
+    if mobile:
+        fig_tem = Figure(figsize=(8, 12))
+        axes_tem = fig_tem.subplots(3, 1)
+        fig_tem.subplots_adjust(hspace=0.45)
+    else:
+        fig_tem = Figure(figsize=(18, 6))
+        axes_tem = fig_tem.subplots(1, 3)
+        fig_tem.subplots_adjust(wspace=0.35)
 
     ax = axes_tem[0]
     ax.loglog(times, dbdt, "o-", color="steelblue", ms=5, lw=1.5)
@@ -132,16 +137,21 @@ def _build_jac_tem_fig(times, dbdt, J_tem, layer_lbls, n_data):
 
 
 @st.cache_data(show_spinner=False)
-def _build_jac_ves_fig(ab2, rhoap, J_ves, layer_lbls, n_data):
+def _build_jac_ves_fig(ab2, rhoap, J_ves, layer_lbls, n_data, mobile):
     ab2 = np.asarray(ab2)
     rhoap = np.asarray(rhoap)
     J_ves = np.asarray(J_ves)
     layer_lbls = list(layer_lbls)
     N = len(layer_lbls)
 
-    fig_ves = Figure(figsize=(8, 12))
-    axes_ves = fig_ves.subplots(3, 1)
-    fig_ves.subplots_adjust(hspace=0.45)
+    if mobile:
+        fig_ves = Figure(figsize=(8, 12))
+        axes_ves = fig_ves.subplots(3, 1)
+        fig_ves.subplots_adjust(hspace=0.45)
+    else:
+        fig_ves = Figure(figsize=(18, 6))
+        axes_ves = fig_ves.subplots(1, 3)
+        fig_ves.subplots_adjust(wspace=0.35)
 
     ax = axes_ves[0]
     _span_ves = np.log10(rhoap.max()) - np.log10(rhoap.min())
@@ -237,11 +247,11 @@ layer_lbls = [f"L{i+1}\n{rho[i]:.0f}" for i in range(N)]
 tab_tem, tab_ves = st.tabs(["🧲 TEM", "⚡️ VES"])
 
 with tab_tem:
-    fig_tem = _build_jac_tem_fig(times, dbdt, J_tem, tuple(layer_lbls), _N_DATA)
+    fig_tem = _build_jac_tem_fig(times, dbdt, J_tem, tuple(layer_lbls), _N_DATA, is_mobile())
     st.image(fig_tem, use_column_width=True)
 
 with tab_ves:
-    fig_ves = _build_jac_ves_fig(ab2, rhoap, J_ves, tuple(layer_lbls), _N_DATA)
+    fig_ves = _build_jac_ves_fig(ab2, rhoap, J_ves, tuple(layer_lbls), _N_DATA, is_mobile())
     st.image(fig_ves, use_column_width=True)
 
 st.caption(

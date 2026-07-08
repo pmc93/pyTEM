@@ -28,7 +28,7 @@ if _APP_DIR not in sys.path:
 
 from pytem import fwd_circle_central
 from ves import forward as ves_forward
-from _shared import render_footer
+from _shared import render_footer, is_mobile
 
 
 def _fig_png(fig):
@@ -89,13 +89,17 @@ def _ves_fwd(ab2_t, rho_t, h_t, filt):
 
 # ── Cached figure builders (rebuilt only when their inputs change) ────────────
 @st.cache_data(show_spinner=False)
-def _build_tem_fig(times_t, dbdt_t, dbdt_ref_t, thick_t, rho_t):
+def _build_tem_fig(times_t, dbdt_t, dbdt_ref_t, thick_t, rho_t, mobile):
     times = np.asarray(times_t)
     dbdt = np.asarray(dbdt_t)
     dbdt_ref = np.asarray(dbdt_ref_t)
 
-    fig = Figure(figsize=(8, 12))
-    ax1, ax2 = fig.subplots(2, 1)
+    if mobile:
+        fig = Figure(figsize=(8, 12))
+        ax1, ax2 = fig.subplots(2, 1)
+    else:
+        fig = Figure(figsize=(14, 6))
+        ax1, ax2 = fig.subplots(1, 2)
 
     ax1.loglog(times, dbdt_ref, "--", color="black", lw=1.5,
                label="100 Ohm.m Model", zorder=1)
@@ -124,13 +128,17 @@ def _build_tem_fig(times_t, dbdt_t, dbdt_ref_t, thick_t, rho_t):
 
 
 @st.cache_data(show_spinner=False)
-def _build_ves_fig(ab2_t, rhoap_t, rhoap_ref_t, thick_t, rho_t):
+def _build_ves_fig(ab2_t, rhoap_t, rhoap_ref_t, thick_t, rho_t, mobile):
     ab2 = np.asarray(ab2_t)
     rhoap = np.asarray(rhoap_t)
     rhoap_ref = np.asarray(rhoap_ref_t)
 
-    fig = Figure(figsize=(8, 12))
-    ax1, ax2 = fig.subplots(2, 1)
+    if mobile:
+        fig = Figure(figsize=(8, 12))
+        ax1, ax2 = fig.subplots(2, 1)
+    else:
+        fig = Figure(figsize=(14, 6))
+        ax1, ax2 = fig.subplots(1, 2)
 
     _rho_all = np.concatenate([rhoap, rhoap_ref])
     _span_v = np.log10(_rho_all.max()) - np.log10(_rho_all.min())
@@ -262,6 +270,7 @@ with tab_tem:
         fig = _build_tem_fig(
             tuple(times.tolist()), tuple(np.asarray(dbdt).tolist()),
             tuple(np.asarray(dbdt_ref).tolist()), tuple(thick), tuple(rho),
+            is_mobile(),
         )
         st.image(fig, use_column_width=True)
 
@@ -323,6 +332,7 @@ with tab_ves:
         fig = _build_ves_fig(
             tuple(ab2.tolist()), tuple(np.asarray(rhoap).tolist()),
             tuple(np.asarray(rhoap_ref).tolist()), tuple(thick), tuple(rho),
+            is_mobile(),
         )
         st.image(fig, use_column_width=True)
 

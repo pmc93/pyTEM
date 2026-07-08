@@ -28,7 +28,7 @@ if _APP_DIR not in sys.path:
 
 from pytem import fwd_circle_central
 from ves import forward as ves_forward
-from _shared import render_footer
+from _shared import render_footer, is_mobile
 
 
 def _fig_png(fig):
@@ -73,13 +73,17 @@ def _ves_fwd(ab2_t, rho_t, h_t, filt):
 
 # ── Cached figure builders (rebuilt only when the model changes) ──────────────
 @st.cache_data(show_spinner=False)
-def _build_match_tem_fig(times_t, obs_t, pred_t, h1, rho1, rho2):
+def _build_match_tem_fig(times_t, obs_t, pred_t, h1, rho1, rho2, mobile):
     times = np.asarray(times_t)
     obs_t = np.asarray(obs_t)
     pred_t = np.asarray(pred_t)
 
-    fig = Figure(figsize=(8, 12))
-    ax1, ax2 = fig.subplots(2, 1)
+    if mobile:
+        fig = Figure(figsize=(8, 12))
+        ax1, ax2 = fig.subplots(2, 1)
+    else:
+        fig = Figure(figsize=(14, 6))
+        ax1, ax2 = fig.subplots(1, 2)
     ax1.loglog(times, obs_t, "o", color="black", ms=5, label="Data", zorder=3)
     ax1.loglog(times, pred_t, "-", color="steelblue", lw=2, label="Your model", zorder=4)
     ax1.set_xlabel("Time [s]")
@@ -99,13 +103,17 @@ def _build_match_tem_fig(times_t, obs_t, pred_t, h1, rho1, rho2):
 
 
 @st.cache_data(show_spinner=False)
-def _build_match_ves_fig(ab2_t, obs_v, pred_v, h1, rho1, rho2):
+def _build_match_ves_fig(ab2_t, obs_v, pred_v, h1, rho1, rho2, mobile):
     ab2 = np.asarray(ab2_t)
     obs_v = np.asarray(obs_v)
     pred_v = np.asarray(pred_v)
 
-    fig = Figure(figsize=(8, 12))
-    ax1, ax2 = fig.subplots(2, 1)
+    if mobile:
+        fig = Figure(figsize=(8, 12))
+        ax1, ax2 = fig.subplots(2, 1)
+    else:
+        fig = Figure(figsize=(14, 6))
+        ax1, ax2 = fig.subplots(1, 2)
     ax1.loglog(ab2, obs_v, "o", color="black", ms=5, label="Data", zorder=3)
     ax1.loglog(ab2, pred_v, "-", color="darkorange", lw=2, label="Your model", zorder=4)
     ax1.set_xlabel("AB/2 [m]")
@@ -258,6 +266,7 @@ with tab_tem:
         fig = _build_match_tem_fig(
             tuple(times.tolist()), tuple(np.asarray(obs_t).tolist()),
             tuple(np.asarray(pred_t).tolist()), h1, rho1, rho2,
+            is_mobile(),
         )
         st.image(fig, use_column_width=True)
 
@@ -326,6 +335,7 @@ with tab_ves:
         fig = _build_match_ves_fig(
             tuple(ab2.tolist()), tuple(np.asarray(obs_v).tolist()),
             tuple(np.asarray(pred_v).tolist()), h1, rho1, rho2,
+            is_mobile(),
         )
         st.image(fig, use_column_width=True)
 
