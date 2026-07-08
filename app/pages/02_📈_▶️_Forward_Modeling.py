@@ -43,13 +43,13 @@ def _model_ui(prefix, n, def_rho, def_h):
         with col_h:
             if not is_hs:
                 h_def = int(def_h[i]) if i < len(def_h) else 20
-                h_out.append(float(st.slider("Thickness (m)", 1, 500, h_def,
+                h_out.append(float(st.slider("Thickness [m]", 1, 500, h_def,
                                              key=f"{prefix}_h{i}")))
             else:
                 st.caption("No thickness: this bottom layer extends downward forever.")
         with col_r:
             rho_def = min(_RHO, key=lambda x: abs(x - (def_rho[i] if i < len(def_rho) else 100)))
-            r_out.append(float(st.select_slider("Resistivity (Ohm.m)", _RHO, value=rho_def,
+            r_out.append(float(st.select_slider("Resistivity [Ohm.m]", _RHO, value=rho_def,
                                                 key=f"{prefix}_r{i}")))
     return h_out, r_out
 
@@ -125,7 +125,7 @@ with tab_tem:
     col_s1, col_s2 = st.columns(2)
     with col_s1:
         tx_side = st.number_input(
-            "Tx loop side length (m)", min_value=5, max_value=500, value=40, step=5,
+            "Tx loop side length [m]", min_value=5, max_value=500, value=40, step=5,
             key="fwd_tem_side",
             help="Side length of the square transmitter loop laid on the ground. "
                  "A bigger loop injects more energy and reaches greater depth.",
@@ -231,12 +231,12 @@ with tab_ves:
     col_s1, col_s2 = st.columns(2)
     with col_s1:
         ab2_min = st.slider(
-            "AB/2 minimum (m)", 1, 30, 1, key="fwd_ves_ab2min",
+            "AB/2 minimum [m]", 1, 30, 1, key="fwd_ves_ab2min",
             help="Smallest half-spacing between the current electrodes. Small "
                  "spacings sample shallow ground.",
         )
         ab2_max = st.slider(
-            "AB/2 maximum (m)", 50, 2000, 300, key="fwd_ves_ab2max",
+            "AB/2 maximum [m]", 50, 2000, 300, key="fwd_ves_ab2max",
             help="Largest half-spacing between the current electrodes. Large "
                  "spacings drive current deeper.",
         )

@@ -135,7 +135,7 @@ with col2:
     <li><b>Source:</b> galvanic, electrodes must contact the ground</li>
     <li><b>Depth proxy:</b> AB electrode spacing (small = shallow, large = deep)</li>
     <li><b>Best for:</b> resistive layers and general stratigraphy</li>
-    <li><b>data:</b> apparent resistivity curve ρ<sub>a</sub>(AB/2)</li>
+    <li><b>Data:</b> apparent resistivity curve ρ<sub>a</sub>(AB/2)</li>
   </ul>
 </div>
 """, unsafe_allow_html=True)
@@ -260,7 +260,7 @@ st.markdown(
       layers; compare TEM and VES sensitivity side by side.
     - 🎯 **Inversion ▶️**: Run a synthetic inversion for TEM and VES
       and inspect how well each recovers the true model.
-    -  **About**: References and acknowledgements.
+    - 👉 **About**: References and acknowledgements.
     """
 )
 

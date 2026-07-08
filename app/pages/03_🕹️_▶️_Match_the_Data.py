@@ -172,15 +172,15 @@ with tab_tem:
     st.markdown("**Your model** (a layer over a half-space)")
     col_r, col_m = st.columns(2)
     with col_r:
-        rho1 = float(st.select_slider("Resistivity of layer 1 (Ohm.m)", _RHO, value=50,
+        rho1 = float(st.select_slider("Resistivity of layer 1 [Ohm.m]", _RHO, value=50,
                                       key="match_tem_r1",
                                       help="Resistivity of the top layer."))
-        rho2 = float(st.select_slider("Resistivity of half-space (Ohm.m)", _RHO, value=200,
+        rho2 = float(st.select_slider("Resistivity of half-space [Ohm.m]", _RHO, value=200,
                                       key="match_tem_r2",
                                       help="Resistivity of the basement, which extends "
                                            "to infinite depth."))
     with col_m:
-        h1 = float(st.slider("Thickness of layer 1 (m)", 1, 100, 20,
+        h1 = float(st.slider("Thickness of layer 1 [m]", 1, 100, 20,
                              key="match_tem_h1",
                              help="How thick the top layer is."))
 
@@ -256,15 +256,15 @@ with tab_ves:
     st.markdown("**Your model** (a layer over a half-space)")
     col_r, col_m = st.columns(2)
     with col_r:
-        rho1 = float(st.select_slider("Resistivity of layer 1 (Ohm.m)", _RHO, value=100,
+        rho1 = float(st.select_slider("Resistivity of layer 1 [Ohm.m]", _RHO, value=100,
                                       key="match_ves_r1",
                                       help="Resistivity of the top layer."))
-        rho2 = float(st.select_slider("Resistivity of half-space (Ohm.m)", _RHO, value=100,
+        rho2 = float(st.select_slider("Resistivity of half-space [Ohm.m]", _RHO, value=100,
                                       key="match_ves_r2",
                                       help="Resistivity of the basement, which extends "
                                            "to infinite depth."))
     with col_m:
-        h1 = float(st.slider("Thickness of layer 1 (m)", 1, 100, 30,
+        h1 = float(st.slider("Thickness of layer 1 [m]", 1, 100, 30,
                              key="match_ves_h1",
                              help="How thick the top layer is."))
 

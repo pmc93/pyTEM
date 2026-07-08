@@ -194,7 +194,7 @@ with _col_btn:
     _run = st.button("Run inversions", type="primary")
 with _col_rho:
     start_rho = st.slider(
-        "Starting (half-space) resistivity [Ohm.m]",
+        "Starting resistivity [Ohm.m]",
         min_value=20, max_value=500, value=100, step=10,
         help="Both inversions start from a uniform half-space and refine it.",
     )
@@ -227,7 +227,7 @@ if "wa_result" in st.session_state and "wa_result_ves" in st.session_state:
     m4.metric("VES iterations", len(rms_hist_v))
 
     show_units = st.toggle(
-        "Overlay interpreted regolith units",
+        "Show interpreted units",
         value=False,
         help="Draw the broad hydrogeological boundaries (cap / saprolite aquifer / "
              "fresh basement) as horizontal markers on the recovered-model panel.",
