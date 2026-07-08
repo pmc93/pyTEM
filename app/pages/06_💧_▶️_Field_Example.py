@@ -68,7 +68,7 @@ st.markdown(
 
 st.info(
     "**The task.** A field crew recorded two soundings at a candidate borehole "
-    "site: a central-loop TEM sounding (40 x 40 m loop) and a Schlumberger VES. "
+    "site: a central-loop TEM sounding (40 x 40 m loop) and a VES sounding. "
     "The true ground is unknown. Invert both, compare what each method resolves."
 )
 
@@ -105,7 +105,7 @@ except FileNotFoundError:
 # -- Show the raw field data ---------------------------------------------------
 st.subheader("1. The measured soundings")
 
-fig_raw, (ax_tem_raw, ax_ves_raw) = plt.subplots(1, 2, figsize=(13, 5), constrained_layout=True)
+fig_raw, (ax_tem_raw, ax_ves_raw) = plt.subplots(2, 1, figsize=(8, 12), constrained_layout=True)
 
 ax_tem_raw.plot(times, dbdt_obs, "o-", ms=5, color="steelblue", lw=1.5, label="Field data")
 ax_tem_raw.set_xscale("log")
@@ -119,6 +119,7 @@ ax_tem_raw.legend()
 ax_ves_raw.plot(ab2, rhoa_obs, "o-", ms=5, color="darkorange", lw=1.5, label="Field data")
 ax_ves_raw.set_xscale("log")
 ax_ves_raw.set_yscale("log")
+ax_ves_raw.set_ylim(top=1e3)
 ax_ves_raw.set_xlabel("AB/2 [m]")
 ax_ves_raw.set_ylabel("Apparent resistivity [Ohm.m]")
 ax_ves_raw.set_title("Schlumberger VES sounding")
@@ -130,19 +131,7 @@ st.pyplot(fig_raw, clear_figure=True)
 # -- Inversion controls --------------------------------------------------------
 st.subheader("2. Invert both soundings for a resistivity-depth model")
 
-c1, c2 = st.columns(2)
-with c1:
-    start_rho = st.slider(
-        "Starting (half-space) resistivity [Ohm.m]",
-        min_value=20, max_value=500, value=100, step=10,
-        help="Both inversions start from a uniform half-space and refine it.",
-    )
-with c2:
-    max_depth = st.slider(
-        "Maximum model depth [m]",
-        min_value=80, max_value=300, value=200, step=10,
-        help="Depth of the deepest model layer node.",
-    )
+max_depth = 200  # sensible default depth of the deepest model layer node [m]
 
 @st.cache_data(show_spinner=False)
 def _invert_field(times_t, dbdt_t, sigma_t, tx_r, start_rho, max_depth):
@@ -198,7 +187,19 @@ def _stair(thick, rho, extra=50.0):
     return rs, ds
 
 
-if st.button("Run inversions", type="primary"):
+_col_btn, _col_rho = st.columns([1, 3])
+with _col_btn:
+    st.write("")
+    st.write("")
+    _run = st.button("Run inversions", type="primary")
+with _col_rho:
+    start_rho = st.slider(
+        "Starting (half-space) resistivity [Ohm.m]",
+        min_value=20, max_value=500, value=100, step=10,
+        help="Both inversions start from a uniform half-space and refine it.",
+    )
+
+if _run:
     with st.spinner("Inverting the TEM and VES soundings..."):
         _res_tem = _invert_field(
             tuple(times), tuple(dbdt_obs), tuple(sigma),
@@ -225,6 +226,13 @@ if "wa_result" in st.session_state and "wa_result_ves" in st.session_state:
               help="Normalised by the 5% data error; target ~1.0.")
     m4.metric("VES iterations", len(rms_hist_v))
 
+    show_units = st.toggle(
+        "Overlay interpreted regolith units",
+        value=False,
+        help="Draw the broad hydrogeological boundaries (cap / saprolite aquifer / "
+             "fresh basement) as horizontal markers on the recovered-model panel.",
+    )
+
     # -- Combined recovered models + data fits ---------------------------------
     fig = plt.figure(figsize=(12, 12))
     gs = fig.add_gridspec(2, 2, hspace=0.32, wspace=0.3)
@@ -243,6 +251,24 @@ if "wa_result" in st.session_state and "wa_result_ves" in st.session_state:
     ax_model.set_title("Recovered resistivity models")
     ax_model.grid(True, which="both", ls="--", alpha=0.8)
     ax_model.legend()
+
+    if show_units:
+        _units = [
+            (0.0, 6.0, "Lateritic / ferricrete cap"),
+            (6.0, 36.0, "Saprolite aquifer"),
+            (36.0, None, "Fresh basement"),
+        ]
+        _xmin, _xmax = ax_model.get_xlim()
+        _ybot = ax_model.get_ylim()[0]           # deepest visible depth (y inverted)
+        _x_lbl = np.sqrt(_xmin * _xmax)          # geometric centre on the log axis
+        for _top, _base, _name in _units:
+            ax_model.axhline(_top, color="black", ls="--", lw=1.4, alpha=0.9, zorder=1)
+            _mid = (_top + (_base if _base is not None else _ybot)) / 2.0
+            ax_model.text(
+                _x_lbl, _mid, _name, color="black", fontsize=13, fontweight="bold",
+                ha="center", va="center", zorder=3,
+                bbox=dict(boxstyle="round,pad=0.25", fc="white", ec="black", alpha=0.85),
+            )
 
     ax_tem.loglog(times, dbdt_pred, "-", color="steelblue", lw=1.5, label="Predicted")
     ax_tem.loglog(times, dbdt_obs, "o", color="black", ms=4, label="TEM data")

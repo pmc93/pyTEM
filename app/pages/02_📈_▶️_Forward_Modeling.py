@@ -31,20 +31,26 @@ from _shared import render_footer
 # ── Shared utilities ──────────────────────────────────────────────────────────
 _RHO = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000]
 
-
 def _model_ui(prefix, n, def_rho, def_h):
-    """Labelled slider per layer. Returns (thicknesses, resistivities)."""
+    """Labelled sliders per layer, thickness and resistivity side by side.
+    Returns (thicknesses, resistivities)."""
     h_out, r_out = [], []
     for i in range(n):
-        label = f"Layer {i+1}" if i < n - 1 else "Half-space"
+        is_hs = i == n - 1
+        label = f"Layer {i+1}" if not is_hs else "Half-space (infinite depth)"
         st.markdown(f"**{label}**")
-        if i < n - 1:
-            h_def = int(def_h[i]) if i < len(def_h) else 20
-            h_out.append(float(st.slider(f"Thickness (m)", 1, 500, h_def,
-                                         key=f"{prefix}_h{i}")))
-        rho_def = min(_RHO, key=lambda x: abs(x - (def_rho[i] if i < len(def_rho) else 100)))
-        r_out.append(float(st.select_slider(f"Resistivity (Ohm.m)", _RHO, value=rho_def,
-                                            key=f"{prefix}_r{i}")))
+        col_h, col_r = st.columns(2)
+        with col_h:
+            if not is_hs:
+                h_def = int(def_h[i]) if i < len(def_h) else 20
+                h_out.append(float(st.slider("Thickness (m)", 1, 500, h_def,
+                                             key=f"{prefix}_h{i}")))
+            else:
+                st.caption("No thickness: this bottom layer extends downward forever.")
+        with col_r:
+            rho_def = min(_RHO, key=lambda x: abs(x - (def_rho[i] if i < len(def_rho) else 100)))
+            r_out.append(float(st.select_slider("Resistivity (Ohm.m)", _RHO, value=rho_def,
+                                                key=f"{prefix}_r{i}")))
     return h_out, r_out
 
 
@@ -75,9 +81,14 @@ def _ves_fwd(ab2_t, rho_t, h_t, filt):
 # ── Page header ───────────────────────────────────────────────────────────────
 st.header(":blue[Predicted response for a layered earth model]")
 st.markdown(
-    "Build a layered resistivity model and see the predicted sounding curve "
-    "update in real time. Each tab is independent; you can explore different "
-    "models for TEM and VES. In both cases a 100 Ohm.m is included for reference."
+    "Build a layered resistivity model on the **right** and see the predicted "
+    "sounding curve update on the **left** in real time. The sliders change the "
+    "*earth model* (layer thicknesses and resistivities); the left panel is the "
+    "*simulated measurement* that such an earth would produce, not something you "
+    "edit directly. The layered earth model below is **shared between the TEM and "
+    "VES tabs**, so switching method keeps the same structure and makes the two "
+    "responses directly comparable. In both cases a homogeneous 100 Ohm.m earth is "
+    "shown for reference."
 )
 
 with st.expander("Why forward modelling?", expanded=False):
@@ -92,6 +103,16 @@ with st.expander("Why forward modelling?", expanded=False):
         """
     )
 
+# ── Shared earth model (kept identical across TEM and VES) ──────────────────
+st.subheader(":green-background[Layer model (shared by TEM and VES)]", divider="green")
+n_layers = int(st.number_input(
+    "Number of layers", 2, 6, 3, key="fwd_n",
+    help="The bottom layer is always a half-space that extends to infinite "
+         "depth, so it has a resistivity but no thickness. This model is shared "
+         "by the TEM and VES tabs so the two methods can be compared on the same earth.",
+))
+thick, rho = _model_ui("fwd_shared", n_layers, [100, 10, 300], [20, 50])
+
 tab_tem, tab_ves = st.tabs(["🧲 TEM", "⚡️ VES"])
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -103,9 +124,18 @@ with tab_tem:
     st.markdown("**System Parameters**")
     col_s1, col_s2 = st.columns(2)
     with col_s1:
-        tx_side = st.number_input("Tx loop side length (m)", min_value=5, max_value=500, value=40, step=5, key="fwd_tem_side")
+        tx_side = st.number_input(
+            "Tx loop side length (m)", min_value=5, max_value=500, value=40, step=5,
+            key="fwd_tem_side",
+            help="Side length of the square transmitter loop laid on the ground. "
+                 "A bigger loop injects more energy and reaches greater depth.",
+        )
         tx_r = float(np.sqrt(tx_side ** 2 / np.pi))
-        n_t = int(st.number_input("Time gates", 5, 50, 25, key="fwd_tem_nt"))
+        n_t = int(st.number_input(
+            "Time gates", 5, 50, 25, key="fwd_tem_nt",
+            help="Number of time channels sampled on the decay curve, spaced "
+                 "logarithmically between the early and late times below.",
+        ))
     with col_s2:
         st.markdown("log<sub>10</sub>(Early time [s])", unsafe_allow_html=True)
         t_min = st.slider(
@@ -116,6 +146,8 @@ with tab_tem:
             0.25,
             key="fwd_tem_tmin",
             label_visibility="collapsed",
+            help="First (earliest) gate time, as a power of 10. Earlier times "
+                 "sense shallower ground.",
         )
         st.markdown("log<sub>10</sub>(Late time [s])", unsafe_allow_html=True)
         t_max = st.slider(
@@ -126,26 +158,23 @@ with tab_tem:
             0.25,
             key="fwd_tem_tmax",
             label_visibility="collapsed",
+            help="Last (latest) gate time, as a power of 10. Later times sense "
+                 "deeper structure.",
         )
-
-    st.markdown("**Layer model**")
-    n_tem = int(st.number_input("Number of layers", 2, 6, 3, key="fwd_tem_n"))
-    t_thick, t_rho = _model_ui("fwd_tem", n_tem,
-                                [100, 10, 300], [20, 50])
 
     times = np.logspace(t_min, t_max, n_t)
 
-    st.button("🧮 Compute forward model", key="fwd_tem_btn", type="primary")
+    st.caption("The plot updates automatically when you move a slider.")
 
     try:
         with st.spinner("Computing …"):
-            dbdt = _tem_fwd(tuple(t_thick), tuple(t_rho), tx_r, tuple(times.tolist()))
+            dbdt = _tem_fwd(tuple(thick), tuple(rho), tx_r, tuple(times.tolist()))
             dbdt_ref = _tem_fwd((), (100.0,), tx_r, tuple(times.tolist()))
 
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(8, 12))
 
         ax1.loglog(times, dbdt_ref, "--", color="black", lw=1.5,
-                   label="Homogeneous 100 Ohm.m", zorder=1)
+                   label="100 Ohm.m Model", zorder=1)
         ax1.loglog(times, dbdt, "o-", color="steelblue", ms=4, lw=1.5,
                    label="Layered model", zorder=2)
         ax1.set_xlabel("Time [s]")
@@ -153,7 +182,7 @@ with tab_tem:
         ax1.grid(True, which="both", ls="--", alpha=0.8)
         ax1.legend()
 
-        rs, ds = _stair(t_thick, t_rho)
+        rs, ds = _stair(thick, rho)
         _span_m = max(rs) / min(r for r in rs if r > 0)
         if _span_m < 10**2.5:
             _ctr_m = (max(rs) * min(r for r in rs if r > 0)) ** 0.5
@@ -190,7 +219,7 @@ with tab_tem:
                 """
             )
     except Exception as _e:
-        st.warning(f"⚠️ Could not compute: {_e}. Adjust the sliders and click **🧮 Compute forward model**.")
+        st.warning(f"⚠️ Could not compute: {_e}. Try adjusting the sliders.")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # VES TAB
@@ -201,27 +230,33 @@ with tab_ves:
     st.markdown("**Survey Parameters**")
     col_s1, col_s2 = st.columns(2)
     with col_s1:
-        ab2_min = st.slider("AB/2 minimum (m)", 1, 30, 1, key="fwd_ves_ab2min")
-        ab2_max = st.slider("AB/2 maximum (m)", 50, 2000, 300, key="fwd_ves_ab2max")
-        n_ab2 = int(st.number_input("AB/2 points", 5, 60, 25, key="fwd_ves_nab2"))
+        ab2_min = st.slider(
+            "AB/2 minimum (m)", 1, 30, 1, key="fwd_ves_ab2min",
+            help="Smallest half-spacing between the current electrodes. Small "
+                 "spacings sample shallow ground.",
+        )
+        ab2_max = st.slider(
+            "AB/2 maximum (m)", 50, 2000, 300, key="fwd_ves_ab2max",
+            help="Largest half-spacing between the current electrodes. Large "
+                 "spacings drive current deeper.",
+        )
+        n_ab2 = int(st.number_input(
+            "AB/2 points", 5, 60, 25, key="fwd_ves_nab2",
+            help="Number of electrode spacings sampled along the sounding curve, "
+                 "spaced logarithmically between the minimum and maximum.",
+        ))
         filt = "gs11"
-
-    st.markdown("**Layer model**")
-    n_ves = int(st.number_input("Number of layers", 2, 6, 3, key="fwd_ves_n"))
-    v_thick, v_rho = _model_ui("fwd_ves", n_ves,
-                                [100, 20, 200], [10, 30])
 
     ab2 = np.logspace(np.log10(ab2_min), np.log10(ab2_max), n_ab2)
 
-    st.button("📊 Compute forward model", key="fwd_ves_btn", type="primary",
-              help="Manually trigger computation (also updates automatically on slider change)")
+    st.caption("The plot updates automatically when you move a slider.")
 
     try:
         with st.spinner("Computing …"):
-            rhoap = _ves_fwd(tuple(ab2.tolist()), tuple(v_rho), tuple(v_thick), filt)
+            rhoap = _ves_fwd(tuple(ab2.tolist()), tuple(rho), tuple(thick), filt)
             rhoap_ref = _ves_fwd(tuple(ab2.tolist()), (100.0,), (), filt)
 
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(8, 12))
 
         _rho_all = np.concatenate([rhoap, rhoap_ref])
         _span_v = np.log10(_rho_all.max()) - np.log10(_rho_all.min())
@@ -231,7 +266,7 @@ with tab_ves:
         else:
             _vlo, _vhi = _rho_all.min() * 0.8, _rho_all.max() * 1.25
         ax1.loglog(ab2, rhoap_ref, "--", color="black", lw=1.5,
-                   label="Homogeneous 100 Ohm.m", zorder=1)
+                   label="100 Ohm.m Model", zorder=1)
         ax1.loglog(ab2, rhoap, "o-", color="darkorange", ms=4, lw=1.5,
                    label="Layered model", zorder=2)
         ax1.set_ylim(_vlo, _vhi)
@@ -240,7 +275,7 @@ with tab_ves:
         ax1.grid(True, which="both", ls="--", alpha=0.4)
         ax1.legend()
 
-        rs, ds = _stair(v_thick, v_rho)
+        rs, ds = _stair(thick, rho)
         _span_m = max(rs) / min(r for r in rs if r > 0)
         if _span_m < 10**2.5:
             _ctr_m = (max(rs) * min(r for r in rs if r > 0)) ** 0.5
@@ -276,7 +311,7 @@ with tab_ves:
                 """
             )
     except Exception as _e:
-        st.warning(f"⚠️ Could not compute: {_e}. Adjust the sliders and click **📊 Compute forward model**.")
+        st.warning(f"⚠️ Could not compute: {_e}. Try adjusting the sliders.")
 
 # ═══════════════════════════════════════════════════════════════════════════════════════════════
 # Sensitivity challenge + self-check
@@ -326,7 +361,7 @@ _FWD_QUIZ = [
     {
         "q": "That same buried resistor on the VES apparent-resistivity curve produces:",
         "options": [
-            "A clear rise above the 100 Ohm.m reference",
+            "A clear rise above the 100 Ohm.m reference model",
             "No visible change",
             "A drop below the reference",
         ],

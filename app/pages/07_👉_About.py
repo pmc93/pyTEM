@@ -64,4 +64,12 @@ st.markdown(
     """
 )
 
+st.subheader(":blue-background[Acknowledgements]", divider="blue")
+st.markdown(
+    """
+    Thanks to **Thomas Reimann** (TU Dresden) for reviewing this app and providing
+    valuable feedback that shaped its structure and teaching narrative.
+    """
+)
+
 render_footer()

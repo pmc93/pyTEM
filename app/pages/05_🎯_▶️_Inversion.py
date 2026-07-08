@@ -74,18 +74,25 @@ col_tem_s, col_ves_s = st.columns(2)
 
 with col_tem_s:
     st.markdown('**TEM**')
-    tx_side     = st.number_input('Tx loop side length (m)', min_value=5.0, max_value=500.0, value=40.0, step=5.0, key='inv_tx_side')
+    tx_side     = st.number_input('Tx loop side length (m)', min_value=5.0, max_value=500.0, value=40.0, step=5.0, key='inv_tx_side',
+                                  help='Side length of the square transmitter loop. Larger loops push the signal deeper.')
     tx_r        = float(np.sqrt(tx_side ** 2 / np.pi))
-    t_start_ms  = st.number_input('First gate (ms)', min_value=0.001, max_value=1.0,   value=0.01, format='%.3f', key='inv_t_start')
-    t_end_ms    = st.number_input('Last gate (ms)',  min_value=1.0,   max_value=100.0, value=10.0, format='%.1f', key='inv_t_end')
-    n_times     = int(st.number_input('Number of gates', min_value=5, max_value=60, value=20, step=2, key='inv_n_times'))
-    times       = np.logspace(np.log10(t_start_ms * 1e-3), np.log10(t_end_ms * 1e-3), n_times)
+    t_start_log = st.number_input('First gate log10(s)', min_value=-6.0, max_value=-1.0, value=-5.0, step=0.5, format='%.1f', key='inv_t_start',
+                                  help='Earliest measurement time as a base-10 exponent in seconds, e.g. -5 means 1e-5 s. Early times see shallow structure.')
+    t_end_log   = st.number_input('Last gate log10(s)',  min_value=-4.0, max_value=0.0,  value=-2.0, step=0.5, format='%.1f', key='inv_t_end',
+                                  help='Latest measurement time as a base-10 exponent in seconds, e.g. -2 means 1e-2 s. Late times see deeper structure.')
+    n_times     = int(st.number_input('Number of gates', min_value=5, max_value=60, value=20, step=2, key='inv_n_times',
+                                      help='How many time gates (data points) are sampled between the first and last gate.'))
+    times       = np.logspace(t_start_log, t_end_log, n_times)
 
 with col_ves_s:
     st.markdown('**VES**')
-    ab2_min     = st.number_input('AB/2 min (m)',  min_value=0.5,  max_value=100.0,  value=1.0,   step=0.5,  key='inv_ab2min')
-    ab2_max     = st.number_input('AB/2 max (m)',  min_value=10.0, max_value=5000.0, value=300.0, step=10.0, key='inv_ab2max')
-    n_ab2       = int(st.number_input('Number of electrode spacings', min_value=5, max_value=60, value=20, step=1, key='inv_nab2'))
+    ab2_min     = st.number_input('AB/2 min (m)',  min_value=0.5,  max_value=100.0,  value=1.0,   step=0.5,  key='inv_ab2min',
+                                  help='Smallest half electrode spacing (AB/2). Small spacings sense shallow structure.')
+    ab2_max     = st.number_input('AB/2 max (m)',  min_value=10.0, max_value=5000.0, value=300.0, step=10.0, key='inv_ab2max',
+                                  help='Largest half electrode spacing (AB/2). Large spacings sense deeper structure.')
+    n_ab2       = int(st.number_input('Number of electrode spacings', min_value=5, max_value=60, value=20, step=1, key='inv_nab2',
+                                      help='How many electrode spacings (data points) are sampled between the min and max AB/2.'))
     ab2         = np.logspace(np.log10(ab2_min), np.log10(ab2_max), n_ab2)
 
 # ==============================================================================
@@ -97,9 +104,9 @@ st.markdown(
     'TEM and VES are inverted independently and results are compared below.'
 )
 
-col_true, col_inv_s = st.columns([3, 1])
+col_true = st.container()
 with col_true:
-    st.caption('Last row is the half-space - leave its Thickness cell empty.')
+    st.caption('Last row is the half-space with an infinite thickness - leave its Thickness cell empty.')
     _default_true = pd.DataFrame({
             'Thickness (m)':       [10.0, 40.0, None],
             'Resistivity (Ohm.m)': [100.0, 10.0, 200.0],
@@ -119,13 +126,8 @@ with col_true:
         st.warning('Add at least one layer.')
         st.stop()
 
-with col_inv_s:
-    st.markdown('**Inversion settings**')
-    start_rho = st.number_input('Starting resistivity (Ohm·m)', min_value=1.0, max_value=5000.0, value=100.0, step=10.0, key='inv_start_rho')
-    st.caption('Regularisation and smoothing are set automatically from the data.')
-
-maxit_tem = 15
-maxit_ves = 15
+maxit_tem = 100
+maxit_ves = 100
 # Fixed VES filter (gs11 â€” good balance between speed and accuracy)
 _VES_FILTER = "gs11"
 
@@ -162,7 +164,7 @@ def _add_noise(dbdt_clean, times, b_coeff, rhoa_clean, ves_frac, seed=42):
 
 
 def _plot_data(clean, noisy):
-    fig, (axt, axv) = plt.subplots(1, 2, figsize=(12, 5))
+    fig, (axt, axv) = plt.subplots(2, 1, figsize=(8, 12))
     _t = clean["times"]
     _a = clean["ab2"]
     axt.loglog(_t, np.abs(clean["dbdt_clean"]), "-", color="steelblue", lw=1.8, label="Clean")
@@ -252,6 +254,15 @@ if noisy is None:
 # ==============================================================================
 st.subheader(":violet-background[3. Run the inversion]", divider="violet")
 
+start_rho = st.number_input('Starting resistivity (Ohm·m)', min_value=1.0, max_value=5000.0, value=100.0, step=10.0, key='inv_start_rho',
+                            help='Resistivity of the homogeneous half-space the inversion starts from before it begins iterating.')
+st.caption('The regularisation (smoothing) is set automatically from the data.')
+st.info(
+    "The **starting model should not influence the final model**. If the result changes "
+    "when you pick a different starting resistivity, it means the data are not dictating "
+    "the inversion. Try a few starting values and check that the final models do not move."
+)
+
 
 @st.cache_data(show_spinner=False)
 def _run_inv(dbdt_obs_t, noise_std_t, times_t, tx_r,
@@ -269,7 +280,7 @@ def _run_inv(dbdt_obs_t, noise_std_t, times_t, tx_r,
     res_tem = tem_invert(
         obs_data=dbdt_obs, thicknesses=thick_tem,
         log_resistivities=log_rho_tem, tx_size=tx_r, times=times,
-        noise_std=noise_std, alpha_steps=10, maxit=50,
+        noise_std=noise_std, alpha_steps=10, maxit=maxit_tem,
         max_noise_frac=0.0,
         transform="dlf", hankel_filter="key_101", fourier_filter="key_81",
         analytical_j=True,
@@ -286,7 +297,7 @@ def _run_inv(dbdt_obs_t, noise_std_t, times_t, tx_r,
     res_ves = ves_invert(
         ab2=ab2, rhoap_obs=rhoa_obs,
         resistivities=rho0_ves, thicknesses=thick_ves,
-        regularization="auto", iter_max=50, filter_set=_VES_FILTER,
+        regularization="auto", iter_max=maxit_ves, filter_set=_VES_FILTER,
         fix_thicknesses=True, noise_frac=ves_frac,
     )
 
@@ -398,7 +409,7 @@ with st.expander("How to read these results"):
         to the noise level. The headline number is the **RMS misfit**: a value
         near **1.0** means the model fits the data about as well as the noise
         allows. Much above 1.0 means underfitting; well below 1.0 means the
-        model is chasing noise.
+        model is fitting noise.
 
         **Bottom panel - recovered models.** The dashed black line is the
         **true model**; the coloured lines are what TEM and VES each recovered.
@@ -410,9 +421,6 @@ with st.expander("How to read these results"):
           resolution with depth as electrode spacings grow.
         - **Smoothing** makes both recovered models gradational: sharp true
           boundaries appear as ramps, not steps.
-        - **Non-uniqueness:** a different model can fit equally well (equivalence).
-          Agreement between two independent methods is the strongest evidence
-          that a feature is real, which is exactly why TEM and VES are combined.
         """
     )
 

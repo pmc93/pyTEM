@@ -37,6 +37,26 @@ def _intro_tem_curve(thick, rho, tx_r, times):
                                tx_radius=tx_r, times=np.array(times))
 
 
+def _figure_placeholder(title):
+    """Render a dashed placeholder box marking where a figure should go.
+
+    Replace each of these with a real image via ``st.image(...)`` once the
+    sketches are drawn.
+    """
+    st.markdown(
+        f"""
+<div style="border:2px dashed #8a8a8a; border-radius:8px; padding:1.4rem 1.2rem;
+            text-align:center; background-color:rgba(128,128,128,0.08);
+            margin:0.6rem 0;">
+  <div style="font-size:1.8rem; line-height:1;">🖼️</div>
+  <div style="font-weight:700; margin:0.35rem 0; color:#9aa7b4;">
+    [FIGURE PLACEHOLDER] {title}
+  </div>
+""",
+        unsafe_allow_html=True,
+    )
+
+
 st.header(":blue[Geophysical methods for groundwater investigation]")
 
 st.markdown(
@@ -58,6 +78,10 @@ st.markdown(
     and **VES** (vertical electrical sounding) methods: both map the subsurface resistivity structure, 
     but they work in fundamentally different ways.
     """
+)
+
+_figure_placeholder(
+    "Conceptual overview of TEM and VES",
 )
 
 # ── Aim, motivation, and target groups ────────────────────────────────────────
@@ -90,10 +114,15 @@ with col1:
     <li><b>Source:</b> inductive, no ground contact needed</li>
     <li><b>Depth proxy:</b> time (early = shallow, late = deep)</li>
     <li><b>Best for:</b> conductive targets (clay, saline water)</li>
-    <li><b>Data:</b> dB/dt decay curve (V/m²)</li>
+    <li><b>Data:</b> transient decay over time (V/m²)</li>
   </ul>
 </div>
 """, unsafe_allow_html=True)
+
+    _figure_placeholder(
+        "TEM measurement principle",
+    )
+   
 
 with col2:
     st.markdown("""
@@ -110,6 +139,11 @@ with col2:
   </ul>
 </div>
 """, unsafe_allow_html=True)
+
+    _figure_placeholder(
+        "VES measurement principle",
+    )
+   
 
 st.divider()
 
@@ -134,7 +168,7 @@ st.markdown(
     | Best sensitivity | Conductive targets and groundwater salinity | Resistive layers and layered stratigraphy |
     | Main limitation | Urban cultural noise and coupling to nearby infrastructure can contaminate signal | Thin layers can suffer from equivalence |
     | Survey footprint | Loop size | Electrode spacing |
-    | Typical output | dB/dt decay curve | Apparent resistivity curve ρ<sub>a</sub>(AB/2) |
+    | Typical output | Transient decay over time | Apparent resistivity curve ρ<sub>a</sub>(AB/2) |
     """,
     unsafe_allow_html=True,
 )
@@ -146,6 +180,12 @@ st.markdown(
     "Resistive and conductive layers are **not** equally easy to resolve. "
     "Think about a layered earth with a **resistive basement** and a **buried "
     "conductor** (a clay-rich, water-saturated aquifer), then test yourself below."
+)
+
+_figure_placeholder(
+
+    "The scenario behind the quiz",
+
 )
 
 _QUIZ = [
@@ -215,7 +255,7 @@ st.markdown(
     """
     :blue[The module is organised as follows:]
     - 📈 **Forward Modeling ▶️**: Build a layered earth model and compute the predicted
-      dB/dt (TEM) and apparent resistivity curve (VES) in real time.
+      transient decay (TEM) and apparent resistivity curve (VES) in real time.
     - 📊 **Jacobian & Sensitivity ▶️**: Explore which data points are sensitive to which
       layers; compare TEM and VES sensitivity side by side.
     - 🎯 **Inversion ▶️**: Run a synthetic inversion for TEM and VES
