@@ -31,3 +31,6 @@ Thumbs.db
 
 # Large offline data
 notebooks/offline_files/
+
+# streamlit reviews
+app/reviews/
