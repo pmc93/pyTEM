@@ -29,7 +29,12 @@ from pytem import fwd_circle_central, invert as tem_invert, getJ_ana
 from pytem.inversion import getR
 from pytem.ip_models import tem_forward_ip, pelton_res_rho
 from ves import forward as ves_forward, invert as ves_invert, jacobian as ves_jacobian, forward_ip as ves_forward_ip
-from _shared import render_footer, is_mobile
+from _shared import render_footer
+try:
+    from _shared import is_mobile
+except ImportError:  # older deployed _shared.py without the helper
+    def is_mobile():
+        return False
 
 # -- Page header ---------------------------------------------------------------
 st.header(":red[Recover a resistivity model from noisy data]")
