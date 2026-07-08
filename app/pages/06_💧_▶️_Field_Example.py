@@ -7,6 +7,7 @@ through interpreting the model in a hydrogeological context: locating the
 conductive weathered-saprolite aquifer above fresh crystalline basement.
 """
 
+import io
 import os
 import sys
 
@@ -38,6 +39,13 @@ if _APP_DIR not in sys.path:
 from pytem import fwd_circle_central, invert as tem_invert
 from ves import forward as ves_forward, invert as ves_invert
 from _shared import render_footer
+
+
+def _fig_png(fig):
+    """Rasterise a Matplotlib figure to PNG bytes (cheap to cache and re-display)."""
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=100, bbox_inches="tight")
+    return buf.getvalue()
 
 _DATA = os.path.join(_ROOT, "app", "data", "west_africa_regolith.csv")
 _DATA_VES = os.path.join(_ROOT, "app", "data", "west_africa_regolith_ves.csv")
@@ -134,11 +142,11 @@ def _build_raw_fig(times_t, dbdt_obs_t, ab2_t, rhoa_obs_t):
     ax_ves_raw.set_title("Schlumberger VES sounding")
     ax_ves_raw.grid(True, which="both", ls="--", alpha=0.8)
     ax_ves_raw.legend()
-    return fig_raw
+    return _fig_png(fig_raw)
 
 
 fig_raw = _build_raw_fig(tuple(times), tuple(dbdt_obs), tuple(ab2), tuple(rhoa_obs))
-st.pyplot(fig_raw)
+st.image(fig_raw, use_column_width=True)
 
 # -- Inversion controls --------------------------------------------------------
 st.subheader("2. Invert both soundings for a resistivity-depth model")
@@ -262,7 +270,7 @@ def _build_results_fig(thick_r, rho_r, thick_v, rho_v, dbdt_pred_t, rhoa_pred_t,
     ax_ves.set_title("VES data fit")
     ax_ves.grid(True, which="both", ls="--", alpha=0.8)
     ax_ves.legend()
-    return fig
+    return _fig_png(fig)
 
 
 _col_btn, _col_rho = st.columns([1, 3])
@@ -319,7 +327,7 @@ if "wa_result" in st.session_state and "wa_result_ves" in st.session_state:
         tuple(times), tuple(dbdt_obs), tuple(ab2), tuple(rhoa_obs),
         bool(show_units),
     )
-    st.pyplot(fig)
+    st.image(fig, use_column_width=True)
 
     # -- Interpretation --------------------------------------------------------
     st.subheader("3. Hydrogeological interpretation")

@@ -1,5 +1,6 @@
 import os
 import sys
+import io
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -28,6 +29,13 @@ if _APP_DIR not in sys.path:
 from pytem import fwd_circle_central, getJ_ana
 from ves import forward as ves_forward, jacobian as ves_jacobian
 from _shared import render_footer
+
+
+def _fig_png(fig):
+    """Rasterise a Matplotlib figure to PNG bytes (cheap to cache and re-display)."""
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=100, bbox_inches="tight")
+    return buf.getvalue()
 
 # -- Constants -----------------------------------------------------------------
 _N_DATA = 20          # fixed number of data points for both methods
@@ -120,7 +128,7 @@ def _build_jac_tem_fig(times, dbdt, J_tem, layer_lbls, n_data):
     ax.set_ylabel("Layer sensitivity [-]")
     ax.set_title("TEM - sensitivity per layer")
     ax.grid(axis="y", ls="--", alpha=0.4)
-    return fig_tem
+    return _fig_png(fig_tem)
 
 
 @st.cache_data(show_spinner=False)
@@ -164,7 +172,7 @@ def _build_jac_ves_fig(ab2, rhoap, J_ves, layer_lbls, n_data):
     ax.set_ylabel("Layer sensitivity [-]")
     ax.set_title("VES - sensitivity per layer")
     ax.grid(axis="y", ls="--", alpha=0.4)
-    return fig_ves
+    return _fig_png(fig_ves)
 
 
 # -- Page ----------------------------------------------------------------------
@@ -230,11 +238,11 @@ tab_tem, tab_ves = st.tabs(["🧲 TEM", "⚡️ VES"])
 
 with tab_tem:
     fig_tem = _build_jac_tem_fig(times, dbdt, J_tem, tuple(layer_lbls), _N_DATA)
-    st.pyplot(fig_tem)
+    st.image(fig_tem, use_column_width=True)
 
 with tab_ves:
     fig_ves = _build_jac_ves_fig(ab2, rhoap, J_ves, tuple(layer_lbls), _N_DATA)
-    st.pyplot(fig_ves)
+    st.image(fig_ves, use_column_width=True)
 
 st.caption(
     "Red = increasing resistivity raises the data value; blue = opposite. "

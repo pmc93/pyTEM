@@ -1,5 +1,6 @@
 import os
 import sys
+import io
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -28,6 +29,13 @@ if _APP_DIR not in sys.path:
 from pytem import fwd_circle_central
 from ves import forward as ves_forward
 from _shared import render_footer
+
+
+def _fig_png(fig):
+    """Rasterise a Matplotlib figure to PNG bytes (cheap to cache and re-display)."""
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=100, bbox_inches="tight")
+    return buf.getvalue()
 
 # ── Shared utilities ──────────────────────────────────────────────────────────
 _RHO = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000]
@@ -112,7 +120,7 @@ def _build_tem_fig(times_t, dbdt_t, dbdt_ref_t, thick_t, rho_t):
     ax2.set_ylabel("Depth [m]")
     ax2.grid(True, which="both", ls="--", alpha=0.8)
     fig.tight_layout()
-    return fig
+    return _fig_png(fig)
 
 
 @st.cache_data(show_spinner=False)
@@ -155,7 +163,7 @@ def _build_ves_fig(ab2_t, rhoap_t, rhoap_ref_t, thick_t, rho_t):
     ax2.set_ylabel("Depth [m]")
     ax2.grid(True, which="both", ls="--", alpha=0.4)
     fig.tight_layout()
-    return fig
+    return _fig_png(fig)
 
 
 # ── Page header ───────────────────────────────────────────────────────────────
@@ -255,7 +263,7 @@ with tab_tem:
             tuple(times.tolist()), tuple(np.asarray(dbdt).tolist()),
             tuple(np.asarray(dbdt_ref).tolist()), tuple(thick), tuple(rho),
         )
-        st.pyplot(fig)
+        st.image(fig, use_column_width=True)
 
         with st.expander("How to read the TEM curve"):
             st.markdown(
@@ -316,7 +324,7 @@ with tab_ves:
             tuple(ab2.tolist()), tuple(np.asarray(rhoap).tolist()),
             tuple(np.asarray(rhoap_ref).tolist()), tuple(thick), tuple(rho),
         )
-        st.pyplot(fig)
+        st.image(fig, use_column_width=True)
 
         with st.expander("How to read the VES curve"):
             st.markdown(

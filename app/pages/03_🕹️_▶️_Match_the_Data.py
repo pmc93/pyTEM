@@ -1,5 +1,6 @@
 import os
 import sys
+import io
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -28,6 +29,13 @@ if _APP_DIR not in sys.path:
 from pytem import fwd_circle_central
 from ves import forward as ves_forward
 from _shared import render_footer
+
+
+def _fig_png(fig):
+    """Rasterise a Matplotlib figure to PNG bytes (cheap to cache and re-display)."""
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=100, bbox_inches="tight")
+    return buf.getvalue()
 
 # ── Shared utilities ──────────────────────────────────────────────────────────
 _RHO = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000]
@@ -87,7 +95,7 @@ def _build_match_tem_fig(times_t, obs_t, pred_t, h1, rho1, rho2):
     ax2.grid(True, which="both", ls="--", alpha=0.6)
     ax2.legend()
     fig.tight_layout()
-    return fig
+    return _fig_png(fig)
 
 
 @st.cache_data(show_spinner=False)
@@ -113,7 +121,7 @@ def _build_match_ves_fig(ab2_t, obs_v, pred_v, h1, rho1, rho2):
     ax2.grid(True, which="both", ls="--", alpha=0.6)
     ax2.legend()
     fig.tight_layout()
-    return fig
+    return _fig_png(fig)
 
 
 # ── Target-data generators (hidden truth, no added noise) ─────────────────
@@ -251,7 +259,7 @@ with tab_tem:
             tuple(times.tolist()), tuple(np.asarray(obs_t).tolist()),
             tuple(np.asarray(pred_t).tolist()), h1, rho1, rho2,
         )
-        st.pyplot(fig)
+        st.image(fig, use_column_width=True)
 
         with st.expander("Reveal the hidden true model"):
             st.markdown(
@@ -319,7 +327,7 @@ with tab_ves:
             tuple(ab2.tolist()), tuple(np.asarray(obs_v).tolist()),
             tuple(np.asarray(pred_v).tolist()), h1, rho1, rho2,
         )
-        st.pyplot(fig)
+        st.image(fig, use_column_width=True)
 
         with st.expander("Reveal the hidden true model"):
             st.markdown(
