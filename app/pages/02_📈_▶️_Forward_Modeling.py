@@ -3,6 +3,7 @@ import sys
 
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.figure import Figure
 # -- Matplotlib font sizes (mobile-friendly) --------------------------
 plt.rcParams.update({
     "font.size":       16,
@@ -76,6 +77,85 @@ def _tem_fwd(h_t, rho_t, r, times_t):
 @st.cache_data(show_spinner=False)
 def _ves_fwd(ab2_t, rho_t, h_t, filt):
     return ves_forward(np.array(ab2_t), np.array(rho_t), np.array(h_t), filt)
+
+
+# ── Cached figure builders (rebuilt only when their inputs change) ────────────
+@st.cache_data(show_spinner=False)
+def _build_tem_fig(times_t, dbdt_t, dbdt_ref_t, thick_t, rho_t):
+    times = np.asarray(times_t)
+    dbdt = np.asarray(dbdt_t)
+    dbdt_ref = np.asarray(dbdt_ref_t)
+
+    fig = Figure(figsize=(8, 12))
+    ax1, ax2 = fig.subplots(2, 1)
+
+    ax1.loglog(times, dbdt_ref, "--", color="black", lw=1.5,
+               label="100 Ohm.m Model", zorder=1)
+    ax1.loglog(times, dbdt, "o-", color="steelblue", ms=4, lw=1.5,
+               label="Layered model", zorder=2)
+    ax1.set_xlabel("Time [s]")
+    ax1.set_ylabel(r"|dB/dt| [V/m$^2$]")
+    ax1.grid(True, which="both", ls="--", alpha=0.8)
+    ax1.legend()
+
+    rs, ds = _stair(list(thick_t), list(rho_t))
+    _span_m = max(rs) / min(r for r in rs if r > 0)
+    if _span_m < 10**2.5:
+        _ctr_m = (max(rs) * min(r for r in rs if r > 0)) ** 0.5
+        _mlo, _mhi = _ctr_m / 10**1.25, _ctr_m * 10**1.25
+    else:
+        _mlo, _mhi = min(r for r in rs if r > 0) * 0.8, max(rs) * 1.25
+    ax2.semilogx(rs, ds, color="steelblue", lw=2)
+    ax2.set_xlim(_mlo, _mhi)
+    ax2.invert_yaxis()
+    ax2.set_xlabel(r"Resistivity [Ohm.m]")
+    ax2.set_ylabel("Depth [m]")
+    ax2.grid(True, which="both", ls="--", alpha=0.8)
+    fig.tight_layout()
+    return fig
+
+
+@st.cache_data(show_spinner=False)
+def _build_ves_fig(ab2_t, rhoap_t, rhoap_ref_t, thick_t, rho_t):
+    ab2 = np.asarray(ab2_t)
+    rhoap = np.asarray(rhoap_t)
+    rhoap_ref = np.asarray(rhoap_ref_t)
+
+    fig = Figure(figsize=(8, 12))
+    ax1, ax2 = fig.subplots(2, 1)
+
+    _rho_all = np.concatenate([rhoap, rhoap_ref])
+    _span_v = np.log10(_rho_all.max()) - np.log10(_rho_all.min())
+    if _span_v < 2.5:
+        _ctr_v = (np.log10(_rho_all.max()) + np.log10(_rho_all.min())) / 2
+        _vlo, _vhi = 10 ** (_ctr_v - 1.25), 10 ** (_ctr_v + 1.25)
+    else:
+        _vlo, _vhi = _rho_all.min() * 0.8, _rho_all.max() * 1.25
+    ax1.loglog(ab2, rhoap_ref, "--", color="black", lw=1.5,
+               label="100 Ohm.m Model", zorder=1)
+    ax1.loglog(ab2, rhoap, "o-", color="darkorange", ms=4, lw=1.5,
+               label="Layered model", zorder=2)
+    ax1.set_ylim(_vlo, _vhi)
+    ax1.set_xlabel(r"AB/2 [m]")
+    ax1.set_ylabel("Apparent resistivity [Ohm.m]")
+    ax1.grid(True, which="both", ls="--", alpha=0.4)
+    ax1.legend()
+
+    rs, ds = _stair(list(thick_t), list(rho_t))
+    _span_m = max(rs) / min(r for r in rs if r > 0)
+    if _span_m < 10**2.5:
+        _ctr_m = (max(rs) * min(r for r in rs if r > 0)) ** 0.5
+        _mlo, _mhi = _ctr_m / 10**1.25, _ctr_m * 10**1.25
+    else:
+        _mlo, _mhi = min(r for r in rs if r > 0) * 0.8, max(rs) * 1.25
+    ax2.semilogx(rs, ds, color="darkorange", lw=2)
+    ax2.set_xlim(_mlo, _mhi)
+    ax2.invert_yaxis()
+    ax2.set_xlabel(r"Resistivity [Ohm.m]")
+    ax2.set_ylabel("Depth [m]")
+    ax2.grid(True, which="both", ls="--", alpha=0.4)
+    fig.tight_layout()
+    return fig
 
 
 # ── Page header ───────────────────────────────────────────────────────────────
@@ -171,35 +251,11 @@ with tab_tem:
             dbdt = _tem_fwd(tuple(thick), tuple(rho), tx_r, tuple(times.tolist()))
             dbdt_ref = _tem_fwd((), (100.0,), tx_r, tuple(times.tolist()))
 
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(8, 12))
-
-        ax1.loglog(times, dbdt_ref, "--", color="black", lw=1.5,
-                   label="100 Ohm.m Model", zorder=1)
-        ax1.loglog(times, dbdt, "o-", color="steelblue", ms=4, lw=1.5,
-                   label="Layered model", zorder=2)
-        ax1.set_xlabel("Time [s]")
-        ax1.set_ylabel(r"|dB/dt| [V/m$^2$]")
-        ax1.grid(True, which="both", ls="--", alpha=0.8)
-        ax1.legend()
-
-        rs, ds = _stair(thick, rho)
-        _span_m = max(rs) / min(r for r in rs if r > 0)
-        if _span_m < 10**2.5:
-            _ctr_m = (max(rs) * min(r for r in rs if r > 0)) ** 0.5
-            _mlo, _mhi = _ctr_m / 10**1.25, _ctr_m * 10**1.25
-        else:
-            _mlo, _mhi = min(r for r in rs if r > 0) * 0.8, max(rs) * 1.25
-        ax2.semilogx(rs, ds, color="steelblue", lw=2)
-        #ax2.fill_betweenx(ds, rs, alpha=0.15, color="steelblue")
-        ax2.set_xlim(_mlo, _mhi)
-        ax2.invert_yaxis()
-        ax2.set_xlabel(r"Resistivity [Ohm.m]")
-        ax2.set_ylabel("Depth [m]")
-        ax2.grid(True, which="both", ls="--", alpha=0.8)
-
-        plt.tight_layout()
+        fig = _build_tem_fig(
+            tuple(times.tolist()), tuple(np.asarray(dbdt).tolist()),
+            tuple(np.asarray(dbdt_ref).tolist()), tuple(thick), tuple(rho),
+        )
         st.pyplot(fig)
-        plt.close(fig)
 
         with st.expander("How to read the TEM curve"):
             st.markdown(
@@ -256,43 +312,11 @@ with tab_ves:
             rhoap = _ves_fwd(tuple(ab2.tolist()), tuple(rho), tuple(thick), filt)
             rhoap_ref = _ves_fwd(tuple(ab2.tolist()), (100.0,), (), filt)
 
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(8, 12))
-
-        _rho_all = np.concatenate([rhoap, rhoap_ref])
-        _span_v = np.log10(_rho_all.max()) - np.log10(_rho_all.min())
-        if _span_v < 2.5:
-            _ctr_v = (np.log10(_rho_all.max()) + np.log10(_rho_all.min())) / 2
-            _vlo, _vhi = 10 ** (_ctr_v - 1.25), 10 ** (_ctr_v + 1.25)
-        else:
-            _vlo, _vhi = _rho_all.min() * 0.8, _rho_all.max() * 1.25
-        ax1.loglog(ab2, rhoap_ref, "--", color="black", lw=1.5,
-                   label="100 Ohm.m Model", zorder=1)
-        ax1.loglog(ab2, rhoap, "o-", color="darkorange", ms=4, lw=1.5,
-                   label="Layered model", zorder=2)
-        ax1.set_ylim(_vlo, _vhi)
-        ax1.set_xlabel(r"AB/2 [m]")
-        ax1.set_ylabel("Apparent resistivity [Ohm.m]")
-        ax1.grid(True, which="both", ls="--", alpha=0.4)
-        ax1.legend()
-
-        rs, ds = _stair(thick, rho)
-        _span_m = max(rs) / min(r for r in rs if r > 0)
-        if _span_m < 10**2.5:
-            _ctr_m = (max(rs) * min(r for r in rs if r > 0)) ** 0.5
-            _mlo, _mhi = _ctr_m / 10**1.25, _ctr_m * 10**1.25
-        else:
-            _mlo, _mhi = min(r for r in rs if r > 0) * 0.8, max(rs) * 1.25
-        ax2.semilogx(rs, ds, color="darkorange", lw=2)
-        #ax2.fill_betweenx(ds, rs, alpha=0.15, color="darkorange")
-        ax2.set_xlim(_mlo, _mhi)
-        ax2.invert_yaxis()
-        ax2.set_xlabel(r"Resistivity [Ohm.m]")
-        ax2.set_ylabel("Depth [m]")
-        ax2.grid(True, which="both", ls="--", alpha=0.4)
-
-        plt.tight_layout()
+        fig = _build_ves_fig(
+            tuple(ab2.tolist()), tuple(np.asarray(rhoap).tolist()),
+            tuple(np.asarray(rhoap_ref).tolist()), tuple(thick), tuple(rho),
+        )
         st.pyplot(fig)
-        plt.close(fig)
 
         with st.expander("How to read the VES curve"):
             st.markdown(

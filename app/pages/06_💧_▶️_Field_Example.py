@@ -12,6 +12,7 @@ import sys
 
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.figure import Figure
 
 plt.rcParams.update({
     "font.size":       16,
@@ -105,28 +106,39 @@ except FileNotFoundError:
 # -- Show the raw field data ---------------------------------------------------
 st.subheader("1. The measured soundings")
 
-fig_raw, (ax_tem_raw, ax_ves_raw) = plt.subplots(2, 1, figsize=(8, 12), constrained_layout=True)
+@st.cache_data(show_spinner=False)
+def _build_raw_fig(times_t, dbdt_obs_t, ab2_t, rhoa_obs_t):
+    times = np.asarray(times_t)
+    dbdt_obs = np.asarray(dbdt_obs_t)
+    ab2 = np.asarray(ab2_t)
+    rhoa_obs = np.asarray(rhoa_obs_t)
 
-ax_tem_raw.plot(times, dbdt_obs, "o-", ms=5, color="steelblue", lw=1.5, label="Field data")
-ax_tem_raw.set_xscale("log")
-ax_tem_raw.set_yscale("log")
-ax_tem_raw.set_xlabel("Time [s]")
-ax_tem_raw.set_ylabel(r"|dB/dt| [V/m$^2$]")
-ax_tem_raw.set_title("Central-loop TEM sounding")
-ax_tem_raw.grid(True, which="both", ls="--", alpha=0.8)
-ax_tem_raw.legend()
+    fig_raw = Figure(figsize=(8, 12), constrained_layout=True)
+    ax_tem_raw, ax_ves_raw = fig_raw.subplots(2, 1)
 
-ax_ves_raw.plot(ab2, rhoa_obs, "o-", ms=5, color="darkorange", lw=1.5, label="Field data")
-ax_ves_raw.set_xscale("log")
-ax_ves_raw.set_yscale("log")
-ax_ves_raw.set_ylim(top=1e3)
-ax_ves_raw.set_xlabel("AB/2 [m]")
-ax_ves_raw.set_ylabel("Apparent resistivity [Ohm.m]")
-ax_ves_raw.set_title("Schlumberger VES sounding")
-ax_ves_raw.grid(True, which="both", ls="--", alpha=0.8)
-ax_ves_raw.legend()
+    ax_tem_raw.plot(times, dbdt_obs, "o-", ms=5, color="steelblue", lw=1.5, label="Field data")
+    ax_tem_raw.set_xscale("log")
+    ax_tem_raw.set_yscale("log")
+    ax_tem_raw.set_xlabel("Time [s]")
+    ax_tem_raw.set_ylabel(r"|dB/dt| [V/m$^2$]")
+    ax_tem_raw.set_title("Central-loop TEM sounding")
+    ax_tem_raw.grid(True, which="both", ls="--", alpha=0.8)
+    ax_tem_raw.legend()
 
-st.pyplot(fig_raw, clear_figure=True)
+    ax_ves_raw.plot(ab2, rhoa_obs, "o-", ms=5, color="darkorange", lw=1.5, label="Field data")
+    ax_ves_raw.set_xscale("log")
+    ax_ves_raw.set_yscale("log")
+    ax_ves_raw.set_ylim(top=1e3)
+    ax_ves_raw.set_xlabel("AB/2 [m]")
+    ax_ves_raw.set_ylabel("Apparent resistivity [Ohm.m]")
+    ax_ves_raw.set_title("Schlumberger VES sounding")
+    ax_ves_raw.grid(True, which="both", ls="--", alpha=0.8)
+    ax_ves_raw.legend()
+    return fig_raw
+
+
+fig_raw = _build_raw_fig(tuple(times), tuple(dbdt_obs), tuple(ab2), tuple(rhoa_obs))
+st.pyplot(fig_raw)
 
 # -- Inversion controls --------------------------------------------------------
 st.subheader("2. Invert both soundings for a resistivity-depth model")
@@ -187,54 +199,19 @@ def _stair(thick, rho, extra=50.0):
     return rs, ds
 
 
-_col_btn, _col_rho = st.columns([1, 3])
-with _col_btn:
-    st.write("")
-    st.write("")
-    _run = st.button("Run inversions", type="primary")
-with _col_rho:
-    start_rho = st.slider(
-        "Starting resistivity [Ohm.m]",
-        min_value=20, max_value=500, value=100, step=10,
-        help="Both inversions start from a uniform half-space and refine it.",
-    )
-
-if _run:
-    with st.spinner("Inverting the TEM and VES soundings..."):
-        _res_tem = _invert_field(
-            tuple(times), tuple(dbdt_obs), tuple(sigma),
-            _TX_RADIUS, start_rho, max_depth,
-        )
-        _res_ves = _invert_field_ves(
-            tuple(ab2), tuple(rhoa_obs), start_rho, max_depth,
-        )
-    st.session_state["wa_result"] = _res_tem
-    st.session_state["wa_result_ves"] = _res_ves
-
-if "wa_result" in st.session_state and "wa_result_ves" in st.session_state:
-    thick_r, rho_r, rms_hist, dbdt_pred = st.session_state["wa_result"]
-    thick_v, rho_v, rms_hist_v, rhoa_pred = st.session_state["wa_result_ves"]
+@st.cache_data(show_spinner=False)
+def _build_results_fig(thick_r, rho_r, thick_v, rho_v, dbdt_pred_t, rhoa_pred_t,
+                       times_t, dbdt_obs_t, ab2_t, rhoa_obs_t, show_units):
     rho_r = np.asarray(rho_r)
     rho_v = np.asarray(rho_v)
+    dbdt_pred = np.asarray(dbdt_pred_t)
+    rhoa_pred = np.asarray(rhoa_pred_t)
+    times = np.asarray(times_t)
+    dbdt_obs = np.asarray(dbdt_obs_t)
+    ab2 = np.asarray(ab2_t)
+    rhoa_obs = np.asarray(rhoa_obs_t)
 
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric("TEM final RMS", f"{rms_hist[-1]:.2f}" if rms_hist else "-",
-              help="Target ~1.0 means the fit is consistent with the noise.")
-    m2.metric("TEM iterations", len(rms_hist))
-    _ves_rms_norm = (rms_hist_v[-1] / 0.05) if rms_hist_v else None
-    m3.metric("VES final RMS", f"{_ves_rms_norm:.2f}" if _ves_rms_norm is not None else "-",
-              help="Normalised by the 5% data error; target ~1.0.")
-    m4.metric("VES iterations", len(rms_hist_v))
-
-    show_units = st.toggle(
-        "Show interpreted units",
-        value=False,
-        help="Draw the broad hydrogeological boundaries (cap / saprolite aquifer / "
-             "fresh basement) as horizontal markers on the recovered-model panel.",
-    )
-
-    # -- Combined recovered models + data fits ---------------------------------
-    fig = plt.figure(figsize=(12, 12))
+    fig = Figure(figsize=(12, 12))
     gs = fig.add_gridspec(2, 2, hspace=0.32, wspace=0.3)
     ax_model = fig.add_subplot(gs[:, 0])
     ax_tem = fig.add_subplot(gs[0, 1])
@@ -285,7 +262,64 @@ if "wa_result" in st.session_state and "wa_result_ves" in st.session_state:
     ax_ves.set_title("VES data fit")
     ax_ves.grid(True, which="both", ls="--", alpha=0.8)
     ax_ves.legend()
-    st.pyplot(fig, clear_figure=True)
+    return fig
+
+
+_col_btn, _col_rho = st.columns([1, 3])
+with _col_btn:
+    st.write("")
+    st.write("")
+    _run = st.button("Run inversions", type="primary")
+with _col_rho:
+    start_rho = st.slider(
+        "Starting resistivity [Ohm.m]",
+        min_value=20, max_value=500, value=100, step=10,
+        help="Both inversions start from a uniform half-space and refine it.",
+    )
+
+if _run:
+    with st.spinner("Inverting the TEM and VES soundings..."):
+        _res_tem = _invert_field(
+            tuple(times), tuple(dbdt_obs), tuple(sigma),
+            _TX_RADIUS, start_rho, max_depth,
+        )
+        _res_ves = _invert_field_ves(
+            tuple(ab2), tuple(rhoa_obs), start_rho, max_depth,
+        )
+    st.session_state["wa_result"] = _res_tem
+    st.session_state["wa_result_ves"] = _res_ves
+
+if "wa_result" in st.session_state and "wa_result_ves" in st.session_state:
+    thick_r, rho_r, rms_hist, dbdt_pred = st.session_state["wa_result"]
+    thick_v, rho_v, rms_hist_v, rhoa_pred = st.session_state["wa_result_ves"]
+    rho_r = np.asarray(rho_r)
+    rho_v = np.asarray(rho_v)
+
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("TEM final RMS", f"{rms_hist[-1]:.2f}" if rms_hist else "-",
+              help="Target ~1.0 means the fit is consistent with the noise.")
+    m2.metric("TEM iterations", len(rms_hist))
+    _ves_rms_norm = (rms_hist_v[-1] / 0.05) if rms_hist_v else None
+    m3.metric("VES final RMS", f"{_ves_rms_norm:.2f}" if _ves_rms_norm is not None else "-",
+              help="Normalised by the 5% data error; target ~1.0.")
+    m4.metric("VES iterations", len(rms_hist_v))
+
+    show_units = st.toggle(
+        "Show interpreted units",
+        value=False,
+        help="Draw the broad hydrogeological boundaries (cap / saprolite aquifer / "
+             "fresh basement) as horizontal markers on the recovered-model panel.",
+    )
+
+    # -- Combined recovered models + data fits (cached) ------------------------
+    fig = _build_results_fig(
+        tuple(thick_r), tuple(np.asarray(rho_r).tolist()),
+        tuple(thick_v), tuple(np.asarray(rho_v).tolist()),
+        tuple(np.asarray(dbdt_pred).tolist()), tuple(np.asarray(rhoa_pred).tolist()),
+        tuple(times), tuple(dbdt_obs), tuple(ab2), tuple(rhoa_obs),
+        bool(show_units),
+    )
+    st.pyplot(fig)
 
     # -- Interpretation --------------------------------------------------------
     st.subheader("3. Hydrogeological interpretation")

@@ -3,6 +3,7 @@ import sys
 
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.figure import Figure
 # -- Matplotlib font sizes (mobile-friendly) --------------------------
 plt.rcParams.update({
     "font.size":       16,
@@ -60,6 +61,59 @@ def _tem_fwd(h_t, rho_t, r, times_t):
 @st.cache_data(show_spinner=False)
 def _ves_fwd(ab2_t, rho_t, h_t, filt):
     return ves_forward(np.array(ab2_t), np.array(rho_t), np.array(h_t), filt)
+
+
+# ── Cached figure builders (rebuilt only when the model changes) ──────────────
+@st.cache_data(show_spinner=False)
+def _build_match_tem_fig(times_t, obs_t, pred_t, h1, rho1, rho2):
+    times = np.asarray(times_t)
+    obs_t = np.asarray(obs_t)
+    pred_t = np.asarray(pred_t)
+
+    fig = Figure(figsize=(8, 12))
+    ax1, ax2 = fig.subplots(2, 1)
+    ax1.loglog(times, obs_t, "o", color="black", ms=5, label="Data", zorder=3)
+    ax1.loglog(times, pred_t, "-", color="steelblue", lw=2, label="Your model", zorder=4)
+    ax1.set_xlabel("Time [s]")
+    ax1.set_ylabel(r"|dB/dt| [V/m$^2$]")
+    ax1.grid(True, which="both", ls="--", alpha=0.6)
+    ax1.legend()
+
+    rs, ds = _stair([h1], [rho1, rho2])
+    ax2.semilogx(rs, ds, color="steelblue", lw=2, label="Your model")
+    ax2.invert_yaxis()
+    ax2.set_xlabel(r"Resistivity [Ohm.m]")
+    ax2.set_ylabel("Depth [m]")
+    ax2.grid(True, which="both", ls="--", alpha=0.6)
+    ax2.legend()
+    fig.tight_layout()
+    return fig
+
+
+@st.cache_data(show_spinner=False)
+def _build_match_ves_fig(ab2_t, obs_v, pred_v, h1, rho1, rho2):
+    ab2 = np.asarray(ab2_t)
+    obs_v = np.asarray(obs_v)
+    pred_v = np.asarray(pred_v)
+
+    fig = Figure(figsize=(8, 12))
+    ax1, ax2 = fig.subplots(2, 1)
+    ax1.loglog(ab2, obs_v, "o", color="black", ms=5, label="Data", zorder=3)
+    ax1.loglog(ab2, pred_v, "-", color="darkorange", lw=2, label="Your model", zorder=4)
+    ax1.set_xlabel("AB/2 [m]")
+    ax1.set_ylabel("Apparent resistivity [Ohm.m]")
+    ax1.grid(True, which="both", ls="--", alpha=0.6)
+    ax1.legend()
+
+    rs, ds = _stair([h1], [rho1, rho2])
+    ax2.semilogx(rs, ds, color="darkorange", lw=2, label="Your model")
+    ax2.invert_yaxis()
+    ax2.set_xlabel(r"Resistivity [Ohm.m]")
+    ax2.set_ylabel("Depth [m]")
+    ax2.grid(True, which="both", ls="--", alpha=0.6)
+    ax2.legend()
+    fig.tight_layout()
+    return fig
 
 
 # ── Target-data generators (hidden truth, no added noise) ─────────────────
@@ -193,27 +247,11 @@ with tab_tem:
         st.metric("Normalised RMS misfit", f"{rms_t:.2f}", help="Aim for about 1.0")
         _fit_feedback(rms_t)
 
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(8, 12))
-        ax1.loglog(times, obs_t, "o", color="black", ms=5,
-                   label="Data", zorder=3)
-        ax1.loglog(times, pred_t, "-", color="steelblue", lw=2,
-                   label="Your model", zorder=4)
-        ax1.set_xlabel("Time [s]")
-        ax1.set_ylabel(r"|dB/dt| [V/m$^2$]")
-        ax1.grid(True, which="both", ls="--", alpha=0.6)
-        ax1.legend()
-
-        rs, ds = _stair([h1], [rho1, rho2])
-        ax2.semilogx(rs, ds, color="steelblue", lw=2, label="Your model")
-        ax2.invert_yaxis()
-        ax2.set_xlabel(r"Resistivity [Ohm.m]")
-        ax2.set_ylabel("Depth [m]")
-        ax2.grid(True, which="both", ls="--", alpha=0.6)
-        ax2.legend()
-
-        plt.tight_layout()
+        fig = _build_match_tem_fig(
+            tuple(times.tolist()), tuple(np.asarray(obs_t).tolist()),
+            tuple(np.asarray(pred_t).tolist()), h1, rho1, rho2,
+        )
         st.pyplot(fig)
-        plt.close(fig)
 
         with st.expander("Reveal the hidden true model"):
             st.markdown(
@@ -277,27 +315,11 @@ with tab_ves:
         st.metric("Normalised RMS misfit", f"{rms_v:.2f}", help="Aim for about 1.0")
         _fit_feedback(rms_v)
 
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(8, 12))
-        ax1.loglog(ab2, obs_v, "o", color="black", ms=5,
-                   label="Data", zorder=3)
-        ax1.loglog(ab2, pred_v, "-", color="darkorange", lw=2,
-                   label="Your model", zorder=4)
-        ax1.set_xlabel("AB/2 [m]")
-        ax1.set_ylabel("Apparent resistivity [Ohm.m]")
-        ax1.grid(True, which="both", ls="--", alpha=0.6)
-        ax1.legend()
-
-        rs, ds = _stair([h1], [rho1, rho2])
-        ax2.semilogx(rs, ds, color="darkorange", lw=2, label="Your model")
-        ax2.invert_yaxis()
-        ax2.set_xlabel(r"Resistivity [Ohm.m]")
-        ax2.set_ylabel("Depth [m]")
-        ax2.grid(True, which="both", ls="--", alpha=0.6)
-        ax2.legend()
-
-        plt.tight_layout()
+        fig = _build_match_ves_fig(
+            tuple(ab2.tolist()), tuple(np.asarray(obs_v).tolist()),
+            tuple(np.asarray(pred_v).tolist()), h1, rho1, rho2,
+        )
         st.pyplot(fig)
-        plt.close(fig)
 
         with st.expander("Reveal the hidden true model"):
             st.markdown(

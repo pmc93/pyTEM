@@ -3,6 +3,7 @@ import sys
 
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.figure import Figure
 # -- Matplotlib font sizes (mobile-friendly) --------------------------
 plt.rcParams.update({
     "font.size":       16,
@@ -81,6 +82,91 @@ def _ves_jac(ab2_t, rho_t, h_t, filt):
     return rhoap, J
 
 
+# -- Cached figure builders (rebuilt only when their inputs change) ------------
+@st.cache_data(show_spinner=False)
+def _build_jac_tem_fig(times, dbdt, J_tem, layer_lbls, n_data):
+    times = np.asarray(times)
+    dbdt = np.asarray(dbdt)
+    J_tem = np.asarray(J_tem)
+    layer_lbls = list(layer_lbls)
+    N = len(layer_lbls)
+
+    fig_tem = Figure(figsize=(8, 12))
+    axes_tem = fig_tem.subplots(3, 1)
+    fig_tem.subplots_adjust(hspace=0.45)
+
+    ax = axes_tem[0]
+    ax.loglog(times, dbdt, "o-", color="steelblue", ms=5, lw=1.5)
+    ax.set_xlabel("Time [s]")
+    ax.set_ylabel(r"|dB/dt| [V/m$^2$]")
+    ax.set_title("TEM - decay curve")
+    ax.grid(True, which="both", ls="--", alpha=0.4)
+
+    ax = axes_tem[1]
+    vmax = max(np.abs(J_tem).max(), 1e-9)
+    im = ax.imshow(J_tem, aspect="auto", cmap="RdBu_r", vmin=-vmax, vmax=vmax)
+    ax.set_xticks(range(N))
+    ax.set_xticklabels(layer_lbls)
+    t_ticks = list(range(0, n_data, max(1, n_data // 5)))
+    ax.set_yticks(t_ticks)
+    ax.set_yticklabels([f"{k + 1}" for k in t_ticks])
+    ax.set_xlabel("Layer")
+    ax.set_ylabel("Data index [-]")
+    ax.set_title("TEM Jacobian")
+    fig_tem.colorbar(im, ax=ax)
+
+    ax = axes_tem[2]
+    ax.bar(layer_lbls, np.linalg.norm(J_tem, axis=0), color="steelblue", alpha=0.8)
+    ax.set_ylabel("Layer sensitivity [-]")
+    ax.set_title("TEM - sensitivity per layer")
+    ax.grid(axis="y", ls="--", alpha=0.4)
+    return fig_tem
+
+
+@st.cache_data(show_spinner=False)
+def _build_jac_ves_fig(ab2, rhoap, J_ves, layer_lbls, n_data):
+    ab2 = np.asarray(ab2)
+    rhoap = np.asarray(rhoap)
+    J_ves = np.asarray(J_ves)
+    layer_lbls = list(layer_lbls)
+    N = len(layer_lbls)
+
+    fig_ves = Figure(figsize=(8, 12))
+    axes_ves = fig_ves.subplots(3, 1)
+    fig_ves.subplots_adjust(hspace=0.45)
+
+    ax = axes_ves[0]
+    _span_ves = np.log10(rhoap.max()) - np.log10(rhoap.min())
+    _ctr_ves  = (np.log10(rhoap.max()) + np.log10(rhoap.min())) / 2
+    if _span_ves < 2.5:
+        ax.set_ylim(10 ** (_ctr_ves - 1.25), 10 ** (_ctr_ves + 1.25))
+    ax.loglog(ab2, rhoap, "o-", color="darkorange", ms=5, lw=1.5)
+    ax.set_xlabel("AB/2 [m]")
+    ax.set_ylabel("Apparent resistivity [Ohm.m]")
+    ax.set_title("VES - sounding curve")
+    ax.grid(True, which="both", ls="--", alpha=0.4)
+
+    ax = axes_ves[1]
+    vmax = max(np.abs(J_ves).max(), 1e-9)
+    im = ax.imshow(J_ves, aspect="auto", cmap="RdBu_r", vmin=-vmax, vmax=vmax)
+    ax.set_xticks(range(N))
+    ax.set_xticklabels(layer_lbls)
+    ab2_ticks = list(range(0, n_data, max(1, n_data // 5)))
+    ax.set_yticks(ab2_ticks)
+    ax.set_yticklabels([f"{k + 1}" for k in ab2_ticks])
+    ax.set_xlabel("Layer")
+    ax.set_ylabel("Data index [-]")
+    ax.set_title("VES Jacobian")
+    fig_ves.colorbar(im, ax=ax)
+
+    ax = axes_ves[2]
+    ax.bar(layer_lbls, np.linalg.norm(J_ves, axis=0), color="darkorange", alpha=0.8)
+    ax.set_ylabel("Layer sensitivity [-]")
+    ax.set_title("VES - sensitivity per layer")
+    ax.grid(axis="y", ls="--", alpha=0.4)
+    return fig_ves
+
+
 # -- Page ----------------------------------------------------------------------
 st.header(":violet[Which data points are sensitive to which layers?]")
 
@@ -143,74 +229,12 @@ layer_lbls = [f"L{i+1}\n{rho[i]:.0f}" for i in range(N)]
 tab_tem, tab_ves = st.tabs(["🧲 TEM", "⚡️ VES"])
 
 with tab_tem:
-    fig_tem, axes_tem = plt.subplots(3, 1, figsize=(8, 12))
-    fig_tem.subplots_adjust(hspace=0.45)
-
-    ax = axes_tem[0]
-    ax.loglog(times, dbdt, "o-", color="steelblue", ms=5, lw=1.5)
-    ax.set_xlabel("Time [s]")
-    ax.set_ylabel(r"|dB/dt| [V/m$^2$]")
-    ax.set_title("TEM - decay curve")
-    ax.grid(True, which="both", ls="--", alpha=0.4)
-
-    ax = axes_tem[1]
-    vmax = max(np.abs(J_tem).max(), 1e-9)
-    im = ax.imshow(J_tem, aspect="auto", cmap="RdBu_r", vmin=-vmax, vmax=vmax)
-    ax.set_xticks(range(N))
-    ax.set_xticklabels(layer_lbls)
-    t_ticks = list(range(0, _N_DATA, max(1, _N_DATA // 5)))
-    ax.set_yticks(t_ticks)
-    ax.set_yticklabels([f"{k + 1}" for k in t_ticks])
-    ax.set_xlabel("Layer")
-    ax.set_ylabel("Data index [-]")
-    ax.set_title("TEM Jacobian")
-    plt.colorbar(im, ax=ax)
-
-    ax = axes_tem[2]
-    ax.bar(layer_lbls, np.linalg.norm(J_tem, axis=0), color="steelblue", alpha=0.8)
-    ax.set_ylabel("Layer sensitivity [-]")
-    ax.set_title("TEM - sensitivity per layer")
-    ax.grid(axis="y", ls="--", alpha=0.4)
-
+    fig_tem = _build_jac_tem_fig(times, dbdt, J_tem, tuple(layer_lbls), _N_DATA)
     st.pyplot(fig_tem)
-    plt.close(fig_tem)
 
 with tab_ves:
-    fig_ves, axes_ves = plt.subplots(3, 1, figsize=(8, 12))
-    fig_ves.subplots_adjust(hspace=0.45)
-
-    ax = axes_ves[0]
-    _span_ves = np.log10(rhoap.max()) - np.log10(rhoap.min())
-    _ctr_ves  = (np.log10(rhoap.max()) + np.log10(rhoap.min())) / 2
-    if _span_ves < 2.5:
-        ax.set_ylim(10 ** (_ctr_ves - 1.25), 10 ** (_ctr_ves + 1.25))
-    ax.loglog(ab2, rhoap, "o-", color="darkorange", ms=5, lw=1.5)
-    ax.set_xlabel("AB/2 [m]")
-    ax.set_ylabel("Apparent resistivity [Ohm.m]")
-    ax.set_title("VES - sounding curve")
-    ax.grid(True, which="both", ls="--", alpha=0.4)
-
-    ax = axes_ves[1]
-    vmax = max(np.abs(J_ves).max(), 1e-9)
-    im = ax.imshow(J_ves, aspect="auto", cmap="RdBu_r", vmin=-vmax, vmax=vmax)
-    ax.set_xticks(range(N))
-    ax.set_xticklabels(layer_lbls)
-    ab2_ticks = list(range(0, _N_DATA, max(1, _N_DATA // 5)))
-    ax.set_yticks(ab2_ticks)
-    ax.set_yticklabels([f"{k + 1}" for k in ab2_ticks])
-    ax.set_xlabel("Layer")
-    ax.set_ylabel("Data index [-]")
-    ax.set_title("VES Jacobian")
-    plt.colorbar(im, ax=ax)
-
-    ax = axes_ves[2]
-    ax.bar(layer_lbls, np.linalg.norm(J_ves, axis=0), color="darkorange", alpha=0.8)
-    ax.set_ylabel("Layer sensitivity [-]")
-    ax.set_title("VES - sensitivity per layer")
-    ax.grid(axis="y", ls="--", alpha=0.4)
-
+    fig_ves = _build_jac_ves_fig(ab2, rhoap, J_ves, tuple(layer_lbls), _N_DATA)
     st.pyplot(fig_ves)
-    plt.close(fig_ves)
 
 st.caption(
     "Red = increasing resistivity raises the data value; blue = opposite. "
