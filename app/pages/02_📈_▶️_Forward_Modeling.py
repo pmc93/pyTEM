@@ -238,7 +238,7 @@ with tab_tem:
                  "logarithmically between the early and late times below.",
         ))
     with col_s2:
-        st.markdown("log<sub>10</sub>(Early time [s])", unsafe_allow_html=True)
+        st.markdown("Early time [log10(s)]")
         t_min = st.slider(
             "Early time [s]",
             -6.0,
@@ -250,7 +250,7 @@ with tab_tem:
             help="First (earliest) gate time, as a power of 10. Earlier times "
                  "sense shallower ground.",
         )
-        st.markdown("log<sub>10</sub>(Late time [s])", unsafe_allow_html=True)
+        st.markdown("Late time [log10(s)]")
         t_max = st.slider(
             "Late time [s]",
             -3.0,
