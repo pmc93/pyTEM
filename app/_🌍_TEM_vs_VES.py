@@ -80,10 +80,6 @@ st.markdown(
     """
 )
 
-_figure_placeholder(
-    "Conceptual overview of TEM and VES",
-)
-
 # ── Aim, motivation, and target groups ────────────────────────────────────────
 st.info(
     """
@@ -119,9 +115,8 @@ with col1:
 </div>
 """, unsafe_allow_html=True)
 
-    _figure_placeholder(
-        "TEM measurement principle",
-    )
+    with open(os.path.join(_APP_DIR, "data", "TEM.png"), "rb") as _f:
+        st.image(_f.read(), use_column_width=True)
    
 
 with col2:
@@ -140,9 +135,8 @@ with col2:
 </div>
 """, unsafe_allow_html=True)
 
-    _figure_placeholder(
-        "VES measurement principle",
-    )
+    with open(os.path.join(_APP_DIR, "data", "VES.png"), "rb") as _f:
+        st.image(_f.read(), use_column_width=True)
    
 
 st.divider()
@@ -180,12 +174,6 @@ st.markdown(
     "Resistive and conductive layers are **not** equally easy to resolve. "
     "Think about a layered earth with a **resistive basement** and a **buried "
     "conductor** (a clay-rich, water-saturated aquifer), then test yourself below."
-)
-
-_figure_placeholder(
-
-    "The scenario behind the quiz",
-
 )
 
 _QUIZ = [
