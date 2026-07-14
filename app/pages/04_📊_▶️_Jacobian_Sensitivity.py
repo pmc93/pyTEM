@@ -52,22 +52,25 @@ def _model_ui(n):
     h_out, r_out = [], []
     defaults_rho = [100, 20, 300, 100, 50, 200]
     defaults_h   = [10, 30, 20, 15, 40]
-    for i in range(n):
-        is_hs = i == n - 1
-        label = f"Layer {i+1}" if not is_hs else "Half-space (infinite depth)"
-        st.markdown(f"**{label}**")
-        col_h, col_r = st.columns(2)
-        with col_h:
+    col_h, col_r = st.columns(2)
+    with col_h:
+        st.markdown("**Thickness [m]**")
+        for i in range(n):
+            is_hs = i == n - 1
+            layer_lbl = f"Layer {i+1}" if not is_hs else "Half-space"
             if not is_hs:
                 h_def = defaults_h[i] if i < len(defaults_h) else 20
-                h_out.append(float(st.slider("Thickness [m]", 1, 500, h_def,
+                h_out.append(float(st.slider(layer_lbl, 1, 500, h_def,
                                              key=f"jac_h{i}")))
             else:
-                st.caption("No thickness: this bottom layer extends downward forever.")
-        with col_r:
+                st.caption(f"{layer_lbl}: extends to ∞")
+    with col_r:
+        st.markdown("**Resistivity [Ohm.m]**")
+        for i in range(n):
+            layer_lbl = f"Layer {i+1}" if i < n - 1 else "Half-space"
             rho_def = defaults_rho[i] if i < len(defaults_rho) else 100
             rho_def = min(_RHO, key=lambda x: abs(x - rho_def))
-            r_out.append(float(st.select_slider("Resistivity [Ohm.m]", _RHO, value=rho_def,
+            r_out.append(float(st.select_slider(layer_lbl, _RHO, value=rho_def,
                                                 key=f"jac_r{i}")))
     return h_out, r_out
 

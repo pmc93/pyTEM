@@ -43,7 +43,7 @@ def _fig_png(fig):
     return buf.getvalue()
 
 # ── Shared utilities ──────────────────────────────────────────────────────────
-_RHO = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000]
+_RHO = [1, 2, 5, 10, 20, 50, 100, 200, 300, 500, 1000, 2000, 5000, 10000]
 _VES_FILTER = "gs11"
 
 
@@ -156,23 +156,21 @@ def _ves_target(thick_t, rho_t, ab2_t, frac):
 
 
 def _rms(pred, obs, sigma):
-    """Noise-normalised RMS misfit (≈1 means the model fits to the noise level)."""
+    """RMS misfit (0 = perfect match)."""
     return float(np.sqrt(np.mean(((pred - obs) / sigma) ** 2)))
 
 
 def _fit_feedback(rms):
-    if rms < 1.5:
-        st.success(f"Excellent fit. Your curve threads the data at the noise level "
-                   f"(normalised RMS = {rms:.2f}).")
-    elif rms < 3.0:
-        st.info(f"Good fit, but not quite at the noise level yet "
-                f"(normalised RMS = {rms:.2f}). Fine-tune the sliders.")
+    if rms < 0.01:
+        st.success(f"Perfect fit (RMS = {rms:.3f}). You found the true model.")
+    elif rms < 0.5:
+        st.success(f"Excellent fit (RMS = {rms:.2f}). Very close to the true model.")
+    elif rms < 2.0:
+        st.info(f"Good fit (RMS = {rms:.2f}). Fine-tune the sliders to improve further.")
     elif rms < 8.0:
-        st.warning(f"Getting closer (normalised RMS = {rms:.2f}). Which part of the "
-                   f"curve still misses the data?")
+        st.warning(f"Getting closer (RMS = {rms:.2f}). Which part of the curve still misses the data?")
     else:
-        st.error(f"Still far off (normalised RMS = {rms:.2f}). Try changing one "
-                 f"parameter at a time and watch which way the curve moves.")
+        st.error(f"Still far off (RMS = {rms:.2f}). Try changing one parameter at a time.")
 
 
 # ── Page header ───────────────────────────────────────────────────────────────
@@ -200,20 +198,19 @@ st.markdown(
     "also reveals why several different models can fit the same data (**non-uniqueness**)."
 )
 
-with st.expander("What is the misfit?", expanded=False):
+with st.expander("What is the RMS misfit?", expanded=False):
     st.markdown(
         r"""
-        Each data point has an error bar $\sigma_i$. The **normalised RMS misfit**
-        measures, on average, how many error bars your model misses each point by:
+        The **RMS misfit** measures how far your predicted curve is from the data
+        on average, expressed as a fraction of the data values:
 
         $$
         \mathrm{RMS} = \sqrt{\frac{1}{N}\sum_{i=1}^{N}
-        \left(\frac{d_i^{\text{pred}} - d_i^{\text{obs}}}{\sigma_i}\right)^2 }
+        \left(\frac{d_i^{\text{pred}} - d_i^{\text{obs}}}{d_i^{\text{obs}}}\right)^2 }
         $$
 
-        - **RMS ≈ 1** means your curve fits the data about as well as the noise
-          allows. You cannot meaningfully do better; chasing the wiggles below this
-          is just fitting noise.
+        - **RMS = 0** means a perfect match.
+        - **RMS < 0.05** is a very good fit.
         - **RMS ≫ 1** means the model is missing real structure in the data.
         """
     )
@@ -245,7 +242,11 @@ with tab_tem:
     )
 
     st.markdown("**Your model** (a layer over a half-space)")
-    col_r, col_m = st.columns(2)
+    col_h, col_r = st.columns(2)
+    with col_h:
+        h1 = float(st.slider("Thickness of layer 1 [m]", 1, 100, 20,
+                             key="match_tem_h1",
+                             help="How thick the top layer is."))
     with col_r:
         rho1 = float(st.select_slider("Resistivity of layer 1 [Ohm.m]", _RHO, value=50,
                                       key="match_tem_r1",
@@ -254,10 +255,6 @@ with tab_tem:
                                       key="match_tem_r2",
                                       help="Resistivity of the basement, which extends "
                                            "to infinite depth."))
-    with col_m:
-        h1 = float(st.slider("Thickness of layer 1 [m]", 1, 100, 20,
-                             key="match_tem_h1",
-                             help="How thick the top layer is."))
 
     st.caption("The plot and misfit update automatically as you move a slider.")
 
@@ -265,7 +262,7 @@ with tab_tem:
         pred_t = _tem_fwd((h1,), (rho1, rho2), tx_r, tuple(times.tolist()))
         rms_t = _rms(pred_t, obs_t, sig_t)
 
-        st.metric("Normalised RMS misfit", f"{rms_t:.2f}", help="Aim for about 1.0")
+        st.metric("RMS misfit", f"{rms_t:.3f}", help="0 = perfect match; lower is better.")
         _fit_feedback(rms_t)
 
         fig = _build_match_tem_fig(
@@ -314,7 +311,11 @@ with tab_ves:
     )
 
     st.markdown("**Your model** (a layer over a half-space)")
-    col_r, col_m = st.columns(2)
+    col_h, col_r = st.columns(2)
+    with col_h:
+        h1 = float(st.slider("Thickness of layer 1 [m]", 1, 100, 30,
+                             key="match_ves_h1",
+                             help="How thick the top layer is."))
     with col_r:
         rho1 = float(st.select_slider("Resistivity of layer 1 [Ohm.m]", _RHO, value=100,
                                       key="match_ves_r1",
@@ -323,10 +324,6 @@ with tab_ves:
                                       key="match_ves_r2",
                                       help="Resistivity of the basement, which extends "
                                            "to infinite depth."))
-    with col_m:
-        h1 = float(st.slider("Thickness of layer 1 [m]", 1, 100, 30,
-                             key="match_ves_h1",
-                             help="How thick the top layer is."))
 
     st.caption("The plot and misfit update automatically as you move a slider.")
 
@@ -334,7 +331,7 @@ with tab_ves:
         pred_v = _ves_fwd(tuple(ab2.tolist()), (rho1, rho2), (h1,), _VES_FILTER)
         rms_v = _rms(pred_v, obs_v, sig_v)
 
-        st.metric("Normalised RMS misfit", f"{rms_v:.2f}", help="Aim for about 1.0")
+        st.metric("RMS misfit", f"{rms_v:.3f}", help="0 = perfect match; lower is better.")
         _fit_feedback(rms_v)
 
         fig = _build_match_ves_fig(
@@ -383,10 +380,8 @@ st.markdown(
     """
 )
 
-# ═════════════════════════════════════════════════════════════════════════# Non-uniqueness discussion
-# ═══════════════════════════════════════════════════════════════════════════════
-st.divider()
-st.subheader(":violet[Why more than one model fits: non-uniqueness]", divider="violet")
+render_footer()
+
 st.markdown(
     r"""
     You may have found **several different models** that give an almost equally low
@@ -424,18 +419,6 @@ st.divider()
 st.subheader(":violet[Check your understanding]", divider="violet")
 
 _MATCH_QUIZ = [
-    {
-        "q": "You reach a normalised RMS misfit of about 1.0 and keep tweaking the "
-             "sliders to push it lower. What are you most likely doing?",
-        "options": [
-            "Recovering the true earth ever more precisely",
-            "Fitting the measurement noise rather than real structure",
-            "Reducing the error bars on the data",
-        ],
-        "answer": "Fitting the measurement noise rather than real structure",
-        "why": "RMS ≈ 1 already means the model matches the data to the noise level. "
-               "Going below that fits the random scatter, not the ground.",
-    },
     {
         "q": "On the TEM tab you find that halving both rho1 and the top-layer "
              "thickness barely changes the misfit. This is because TEM mainly "

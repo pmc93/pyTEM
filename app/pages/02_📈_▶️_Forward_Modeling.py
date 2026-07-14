@@ -46,24 +46,27 @@ def _fig_png(fig):
 _RHO = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000]
 
 def _model_ui(prefix, n, def_rho, def_h):
-    """Labelled sliders per layer, thickness and resistivity side by side.
+    """Two-column table: left = all thickness sliders, right = all resistivity sliders.
     Returns (thicknesses, resistivities)."""
     h_out, r_out = [], []
-    for i in range(n):
-        is_hs = i == n - 1
-        label = f"Layer {i+1}" if not is_hs else "Half-space (infinite depth)"
-        st.markdown(f"**{label}**")
-        col_h, col_r = st.columns(2)
-        with col_h:
+    col_h, col_r = st.columns(2)
+    with col_h:
+        st.markdown("**Thickness [m]**")
+        for i in range(n):
+            is_hs = i == n - 1
+            layer_lbl = f"Layer {i+1}" if not is_hs else "Half-space"
             if not is_hs:
                 h_def = int(def_h[i]) if i < len(def_h) else 20
-                h_out.append(float(st.slider("Thickness [m]", 1, 500, h_def,
+                h_out.append(float(st.slider(layer_lbl, 1, 500, h_def,
                                              key=f"{prefix}_h{i}")))
             else:
-                st.caption("No thickness: this bottom layer extends downward forever.")
-        with col_r:
+                st.caption(f"{layer_lbl}: extends to ∞")
+    with col_r:
+        st.markdown("**Resistivity [Ohm.m]**")
+        for i in range(n):
+            layer_lbl = f"Layer {i+1}" if i < n - 1 else "Half-space"
             rho_def = min(_RHO, key=lambda x: abs(x - (def_rho[i] if i < len(def_rho) else 100)))
-            r_out.append(float(st.select_slider("Resistivity [Ohm.m]", _RHO, value=rho_def,
+            r_out.append(float(st.select_slider(layer_lbl, _RHO, value=rho_def,
                                                 key=f"{prefix}_r{i}")))
     return h_out, r_out
 
@@ -204,15 +207,6 @@ with st.expander("Why forward modelling?", expanded=False):
         """
     )
 
-# ── Shared earth model (kept identical across TEM and VES) ──────────────────
-st.subheader(":green-background[Layer model (shared by TEM and VES)]", divider="green")
-n_layers = int(st.number_input(
-    "Number of layers", 2, 6, 3, key="fwd_n",
-    help="The bottom layer is always a half-space that extends to infinite "
-         "depth, so it has a resistivity but no thickness. This model is shared "
-         "by the TEM and VES tabs so the two methods can be compared on the same earth.",
-))
-thick, rho = _model_ui("fwd_shared", n_layers, [100, 10, 300], [20, 50])
 
 tab_tem, tab_ves = st.tabs(["🧲 TEM", "⚡️ VES"])
 
@@ -222,6 +216,7 @@ tab_tem, tab_ves = st.tabs(["🧲 TEM", "⚡️ VES"])
 with tab_tem:
     st.subheader(":blue-background[TEM - dB/dt sounding]", divider="blue")
 
+    # ── 1. System parameters ──────────────────────────────────────────────────
     st.markdown("**System Parameters**")
     col_s1, col_s2 = st.columns(2)
     with col_s1:
@@ -240,45 +235,39 @@ with tab_tem:
     with col_s2:
         st.markdown("Early time [log10(s)]")
         t_min = st.slider(
-            "Early time [s]",
-            -6.0,
-            -4.0,
-            -5.0,
-            0.25,
-            key="fwd_tem_tmin",
+            "Early time [s]", -6.0, -4.0, -5.0, 0.25, key="fwd_tem_tmin",
             label_visibility="collapsed",
-            help="First (earliest) gate time, as a power of 10. Earlier times "
-                 "sense shallower ground.",
+            help="First (earliest) gate time, as a power of 10. Earlier times sense shallower ground.",
         )
         st.markdown("Late time [log10(s)]")
         t_max = st.slider(
-            "Late time [s]",
-            -3.0,
-            -1.0,
-            -2.0,
-            0.25,
-            key="fwd_tem_tmax",
+            "Late time [s]", -3.0, -1.0, -2.0, 0.25, key="fwd_tem_tmax",
             label_visibility="collapsed",
-            help="Last (latest) gate time, as a power of 10. Later times sense "
-                 "deeper structure.",
+            help="Last (latest) gate time, as a power of 10. Later times sense deeper structure.",
         )
-
     times = np.logspace(t_min, t_max, n_t)
 
-    st.caption("The plot updates automatically when you move a slider.")
+    # ── 2. Layer model ────────────────────────────────────────────────────────
+    st.markdown("**Layer Model**")
+    n_layers_tem = int(st.number_input(
+        "Number of layers", 2, 6, 3, key="fwd_tem_n",
+        help="The bottom layer is a half-space (no thickness). "
+             "Adjust thicknesses and resistivities to explore different earth structures.",
+    ))
+    thick_tem, rho_tem = _model_ui("fwd_tem", n_layers_tem, [100, 10, 300], [20, 50])
 
+    # ── 3. Forward response ───────────────────────────────────────────────────
+    st.caption("The plot updates automatically when you move a slider.")
     try:
         with st.spinner("Computing …"):
-            dbdt = _tem_fwd(tuple(thick), tuple(rho), tx_r, tuple(times.tolist()))
+            dbdt = _tem_fwd(tuple(thick_tem), tuple(rho_tem), tx_r, tuple(times.tolist()))
             dbdt_ref = _tem_fwd((), (100.0,), tx_r, tuple(times.tolist()))
-
         fig = _build_tem_fig(
             tuple(times.tolist()), tuple(np.asarray(dbdt).tolist()),
-            tuple(np.asarray(dbdt_ref).tolist()), tuple(thick), tuple(rho),
+            tuple(np.asarray(dbdt_ref).tolist()), tuple(thick_tem), tuple(rho_tem),
             is_mobile(),
         )
         st.image(fig, use_column_width=True)
-
         with st.expander("How to read the TEM curve"):
             st.markdown(
                 """
@@ -305,18 +294,17 @@ with tab_tem:
 with tab_ves:
     st.subheader(":orange-background[VES - Apparent resistivity sounding]", divider="orange")
 
+    # ── 1. System parameters ──────────────────────────────────────────────────
     st.markdown("**Survey Parameters**")
     col_s1, col_s2 = st.columns(2)
     with col_s1:
         ab2_min = st.slider(
             "AB/2 minimum [m]", 1, 30, 1, key="fwd_ves_ab2min",
-            help="Smallest half-spacing between the current electrodes. Small "
-                 "spacings sample shallow ground.",
+            help="Smallest half-spacing between the current electrodes. Small spacings sample shallow ground.",
         )
         ab2_max = st.slider(
             "AB/2 maximum [m]", 50, 2000, 300, key="fwd_ves_ab2max",
-            help="Largest half-spacing between the current electrodes. Large "
-                 "spacings drive current deeper.",
+            help="Largest half-spacing between the current electrodes. Large spacings drive current deeper.",
         )
         n_ab2 = int(st.number_input(
             "AB/2 points", 5, 60, 25, key="fwd_ves_nab2",
@@ -324,23 +312,28 @@ with tab_ves:
                  "spaced logarithmically between the minimum and maximum.",
         ))
         filt = "gs11"
-
     ab2 = np.logspace(np.log10(ab2_min), np.log10(ab2_max), n_ab2)
 
-    st.caption("The plot updates automatically when you move a slider.")
+    # ── 2. Layer model ────────────────────────────────────────────────────────
+    st.markdown("**Layer Model**")
+    n_layers_ves = int(st.number_input(
+        "Number of layers", 2, 6, 3, key="fwd_ves_n",
+        help="The bottom layer is a half-space (no thickness).",
+    ))
+    thick_ves, rho_ves = _model_ui("fwd_ves", n_layers_ves, [100, 10, 300], [20, 50])
 
+    # ── 3. Forward response ───────────────────────────────────────────────────
+    st.caption("The plot updates automatically when you move a slider.")
     try:
         with st.spinner("Computing …"):
-            rhoap = _ves_fwd(tuple(ab2.tolist()), tuple(rho), tuple(thick), filt)
+            rhoap = _ves_fwd(tuple(ab2.tolist()), tuple(rho_ves), tuple(thick_ves), filt)
             rhoap_ref = _ves_fwd(tuple(ab2.tolist()), (100.0,), (), filt)
-
         fig = _build_ves_fig(
             tuple(ab2.tolist()), tuple(np.asarray(rhoap).tolist()),
-            tuple(np.asarray(rhoap_ref).tolist()), tuple(thick), tuple(rho),
+            tuple(np.asarray(rhoap_ref).tolist()), tuple(thick_ves), tuple(rho_ves),
             is_mobile(),
         )
         st.image(fig, use_column_width=True)
-
         with st.expander("How to read the VES curve"):
             st.markdown(
                 """
